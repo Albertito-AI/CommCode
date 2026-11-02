@@ -22,7 +22,7 @@
     "test:browser": "playwright test"
   },
   "devDependencies": {
-    "@codemirror/lang-html": "6.4.11",
+    "@codemirror/lang-html": "6.4.12",
     "@codemirror/lang-javascript": "6.2.4",
     "@codemirror/lang-python": "6.2.1",
     "@playwright/test": "1.64.1",
