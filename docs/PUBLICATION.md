@@ -24,3 +24,15 @@ before presenting v0.1 as fully verified. No paid infrastructure is provisioned.
 The local `scripts/publish.mjs` helper creates a new repository and therefore stops
 if the repository already exists. It is retained as a reproducible bootstrap helper;
 ordinary subsequent changes use Git branches/commits and non-forced pushes.
+
+## First passing public checks
+
+The full source upload was `bbe43bc7917d87fd998f4021f552e5e30775f476`.
+The repaired runtime and browser acceptance passed at
+`c47bab5df86b9e67aa4e2f8cfe2683dea1998a7e` in
+[run 41454201947](https://github.com/Albertito-AI/CommCode/actions/runs/41454201947).
+A development release is requested by changing `.github/release-request.json`
+on main. The release workflow validates the requested development version against
+package.json, runs its gates and publishes the exact triggering commit. Existing
+release tags are never overwritten. It uses only the repository-scoped workflow
+token and provisions no paid infrastructure.

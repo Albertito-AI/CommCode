@@ -10,15 +10,17 @@ AI subscription.
 
 **Development snapshot: 0.1.0-dev.1.** Public repository:
 [Albertito-AI/CommCode](https://github.com/Albertito-AI/CommCode). This is a
-single-operator local development release candidate, not a production cloud IDE. Read the [verification record](docs/VERIFICATION.md)
-for what was actually tested. A repository URL, release tag or workflow file is
-not evidence of publication or a successful CI run.
+single-operator local development preview. Read the [verification record](docs/VERIFICATION.md)
+for the measured scope and remaining stable-release gates.
 
-## What works in the tested local path
+[![Verify CommCode](https://github.com/Albertito-AI/CommCode/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Albertito-AI/CommCode/actions/workflows/ci.yml)
+
+## Verified development path
 
 - Token-authenticated loopback API, project creation and durable local metadata.
 - A browser interface with a bundled CodeMirror editor, file explorer and
-  optimistic concurrency checks. Browser rendering verification remains pending.
+  optimistic concurrency checks. Chromium exercised editing, tests and a live preview
+  at desktop and mobile viewport sizes in GitHub Actions.
 - JavaScript expense tracker and Python API starters with real tests.
 - Bounded command execution with output limits, timeouts and cancellation.
 - Application startup and HTTP readiness checks, with a separate preview origin.
@@ -29,18 +31,20 @@ not evidence of publication or a successful CI run.
 - Ollama and OpenAI-compatible protocol adapters tested against local HTTP fixtures.
   Live inference requires an operator-configured model and remains unverified here.
 
-## Implemented but awaiting environment verification
+## Runtime and remaining acceptance work
 
 Docker execution is the default and never silently falls back to host execution.
 The adapter applies resource limits, non-root execution, read-only root filesystems,
 read-only Git internals and temporary network access for dependency installation.
-The dedicated Docker integration suite has not run in the authoring environment,
-which has no Docker engine. The supplied CI requires this suite.
+The Docker integration suite passed on GitHub’s Linux runner, including non-root
+execution, read-only root/Git checks, a network-disabled preview, served JavaScript
+and cleanup. Recheck effective resource limits on your target host.
 
 Public GitHub import was verified against an existing public repository. Repository
 creation and push adapters are implemented.
-Authenticated create/push requires a user-supplied token. No live authenticated
-GitHub write or public deployment was performed while preparing this snapshot.
+Authenticated create/push through the product requires a user-supplied token and
+still awaits a live integration run. Publishing CommCode through GitHub tooling
+does not verify that separate product adapter. No hosted production service exists.
 
 ## Quick start
 
@@ -80,6 +84,9 @@ npm audit
 npm run demo
 # Requires a Docker engine and the locally built runtime image:
 npm run test:docker
+# Real Chromium acceptance:
+npx playwright install --with-deps chromium
+npm run test:browser
 ```
 
 The demo executes real starter tests, makes a real edit, starts an HTTP application,

@@ -26,7 +26,7 @@ node --env-file=.env src/cli.mjs
 No dotenv loader runs automatically. Protect `.env` and never commit it. The
 platform does not need an AI key to operate the editor, templates, tests or Git.
 
-The authoring environment had no Docker engine. Before relying on Docker mode,
+Docker integration passed on GitHub’s Linux runner. Before relying on Docker mode,
 run `npm run test:docker` on your target machine and verify effective cgroup limits.
 To inspect trusted templates without Docker, use `npm start -- --unsafe-local`.
 This runs shell commands directly on your host; it is not an isolation substitute.

@@ -13,6 +13,9 @@ The standard test suite uses temporary Git repositories and actual shell command
 on trusted fixtures. It also uses explicitly labelled mock-provider responses.
 No paid model credentials are needed. `test/docker.integration.mjs` is separate
 and requires a real Docker engine plus `commcode-runtime:dev`.
+Run `npx playwright install --with-deps chromium` and `npm run test:browser` for
+the real desktop/mobile UI flow. It uses a trusted temporary starter project and
+produces screenshots in `test-results/`; CI retains these for seven days.
 
 Backend modules are ESM using Node standard libraries. Add dependencies only when
 they remove substantial complexity. Frontend dependencies are bundled with esbuild;

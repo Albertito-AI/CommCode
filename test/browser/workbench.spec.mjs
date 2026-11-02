@@ -41,6 +41,11 @@ test('desktop and mobile: login, create, editor, tests, live preview and expense
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       390,
     );
+    await page.locator('#preview').scrollIntoViewIfNeeded();
+    await frame.locator('#description').fill('Mobile verification');
+    await frame.locator('#amount').fill('2.50');
+    await frame.getByRole('button', { name: 'Add expense', exact: true }).click();
+    await expect(frame.locator('#total')).toHaveText('15.00');
     await page.screenshot({ path: testInfo.outputPath('workbench-mobile.png'), fullPage: true });
     await page.locator('#stop').click();
     await expect(page.locator('#preview-status')).toHaveText('Stopped');

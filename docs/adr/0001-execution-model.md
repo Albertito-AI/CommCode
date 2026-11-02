@@ -1,6 +1,6 @@
 # ADR 0001 Execution model
 
-Status: accepted for development; Docker acceptance tests pending.
+Status: accepted for development; Docker acceptance suite passed in run 41454201947.
 
 Use a modular Node control plane and a replaceable Docker execution adapter.
 Containers receive a single workspace mount, protected Git internals, a non-root

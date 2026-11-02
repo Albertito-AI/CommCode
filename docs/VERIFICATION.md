@@ -2,7 +2,7 @@
 
 Date: 2 November 2026, Asia/Singapore. Version: 0.1.0-dev.1.
 
-## Observed results
+## Initial authoring-environment results
 
 | Check                                   | Result                | Scope                                                                                                                                        |
 | --------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -34,14 +34,13 @@ not constitute a penetration test or prove arbitrary-code hosting safety.
 
 Raw machine-readable evidence: [local demo](evidence/local-demo.json) and
 [npm audit](evidence/npm-audit.json). Demo commit hashes identify real temporary
-repositories created during the run; they are not public GitHub commits. No fake
-screenshots, live-model actions or successful CI badges are supplied.
+repositories created during the run; they are not public GitHub commits. The later CI evidence below extends this initial local record.
 
-## Release gates
+## Stable-release gates
 
 Run the actual Docker suite on the target host, complete desktop/mobile browser
 checks, exercise a configured live model, verify authorised GitHub writes, and
-require green CI on the exact release commit before publishing v0.1. See ROADMAP.
+require green CI on the exact release commit before publishing stable v0.1. See ROADMAP.
 
 ## Public repository continuation
 
@@ -51,3 +50,37 @@ empty state and administrator write access were verified. Bootstrap commit:
 preparation run. Source upload and GitHub Actions results are recorded separately
 below when observed; they do not turn the product’s GitHub adapter fixture into a
 live integration test.
+
+## Public CI acceptance, 2 November 2026
+
+[Run 41454201947](https://github.com/Albertito-AI/CommCode/actions/runs/41454201947)
+passed on commit `c47bab5df86b9e67aa4e2f8cfe2683dea1998a7e`. Observed job steps:
+
+- Installation, formatting, 28 unit/API tests, frontend build, npm advisory audit
+  and the deterministic local demo passed.
+- A real Docker image built from the digest-pinned Node base. The Docker suite
+  executed starter tests, checked non-root identity, rejected root/Git writes,
+  checked network mode `none`, fetched JavaScript through the preview relay and
+  stopped the managed application. It does not stress-test every resource limit.
+- Real Chromium completed login, workspace creation, CodeMirror editing and save,
+  test execution, iframe expense entry and shutdown. Desktop width was 1440 pixels;
+  mobile width was 390 pixels with no page-level horizontal overflow. The browser
+  flow used the explicit trusted-local adapter; Docker was checked separately.
+- The screenshot ZIP was downloaded and its SHA-256 matched the Actions artifact:
+  `9a901badf5b9bf985d18df89c88808fa66945cfa0a65604539d6a677a9a6dddd`.
+  Desktop rendering was inspected. The first full-page mobile capture showed an
+  unpainted off-screen iframe; the next revision scrolls to it and performs an
+  additional mobile expense interaction before capturing.
+
+The initial run 41453397435 failed on Docker preview port discovery. The repair
+uses a fixed HTTP transport through `docker exec`, retaining `network=none`; the
+passing run above contains that repair. Failed evidence is preserved in Actions.
+
+The development prerelease workflow repeats formatting, tests, build, audit,
+Docker and browser acceptance on the exact source commit before creating a release
+and checksummed source archive. A prerelease is not completion of stable gates.
+Live-model acceptance remains [issue #6](https://github.com/Albertito-AI/CommCode/issues/6);
+crash recovery and bounded storage remain [issue #7](https://github.com/Albertito-AI/CommCode/issues/7).
+The product’s authenticated GitHub adapter remains unverified against a live target.
+No production hosting, paid model service or arbitrary-user security certification
+is claimed. Base-image pinning does not freeze Debian package mirrors.

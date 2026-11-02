@@ -7,12 +7,13 @@ command console, HTTP preview, AI proposal transaction, two provider protocols,
 rollback, activity ledger and automated tests are implemented. See verification
 for the remaining environment-dependent acceptance checks.
 
-## Before a published v0.1 release
+## Before a stable v0.1 release
 
-- Verify the full source upload and live files in the owner-created public CommCode repository.
-- Run Docker integration on a supported Linux host, including real resource limits,
-  network isolation, cancellation and cleanup. Pin the runtime image by digest.
-- Complete desktop/mobile browser testing, keyboard testing and real screenshots.
+- Completed: full source upload verified against a fresh public clone.
+- Completed: Docker integration, network-disabled preview and cleanup in Linux CI;
+  base image digest pinned. Extend actual cgroup pressure and cancellation probes.
+- Completed: Chromium desktop/mobile flow and real screenshots. Broaden keyboard,
+  accessibility and cross-browser coverage.
 - Exercise a live local model through propose, apply, tests and commit.
 - Verify public GitHub clone, authenticated creation and non-forced push against a
   disposable authorised test repository.

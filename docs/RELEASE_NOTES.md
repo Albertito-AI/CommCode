@@ -1,10 +1,20 @@
-# CommCode 0.1.0 development preview
+# CommCode 0.1.0-dev.1
 
-An independently implemented local-first software workbench with ordinary Git
-projects, browser editor source, portable templates, bounded commands, a separate
-preview gateway, reviewable AI file proposals, real test execution, recovery and
-an inspectable activity ledger.
+First development prerelease of the independently implemented local software
+workbench: CodeMirror editing, portable JavaScript/Python starters, bounded
+commands, Docker execution, a separate preview gateway, ordinary Git projects,
+reviewable AI file proposals, test-driven repair and conflict-aware rollback.
 
-This is not a stable cloud platform. Consult README and docs/VERIFICATION.md before
-use. Docker, browser, live-model and authenticated GitHub checks must be recorded
-for the actual release environment. No paid services are required for the core.
+The release workflow requires formatting, 28 unit/API checks, frontend build, npm
+advisory audit, real Docker integration and Chromium desktop/mobile acceptance
+on the packaged commit. The source archive is accompanied by SHA256SUMS.txt.
+See the linked Actions run for observed outcomes, not just the workflow definition.
+
+Live AI inference and the product’s authenticated GitHub create/push integration
+remain acceptance work. Protocol fixtures are labelled as such. The browser
+acceptance uses trusted-local execution; the Docker adapter has a separate suite.
+
+This is a single-operator localhost development preview. There is no hosted cloud
+service, full PTY, multi-user boundary or stable-release claim. Preview routing is
+GET/HEAD only. Read README, THREAT_MODEL and docs/VERIFICATION before use. Core use
+requires no paid service. Platform: AGPL-3.0-or-later; starter templates: CC0-1.0.
