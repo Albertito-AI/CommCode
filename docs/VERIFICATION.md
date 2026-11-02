@@ -84,3 +84,21 @@ crash recovery and bounded storage remain [issue #7](https://github.com/Albertit
 The product’s authenticated GitHub adapter remains unverified against a live target.
 No production hosting, paid model service or arbitrary-user security certification
 is claimed. Base-image pinning does not freeze Debian package mirrors.
+
+## Development prerelease observed
+
+[Release v0.1.0-dev.1](https://github.com/Albertito-AI/CommCode/releases/tag/v0.1.0-dev.1)
+was published on 2 November 2026 at 13:45 UTC from
+`fdc8509cf8af432f27c99fdd6dbe01531faa789c`.
+[Release run 41455489247](https://github.com/Albertito-AI/CommCode/actions/runs/41455489247)
+and [main CI 41455489252](https://github.com/Albertito-AI/CommCode/actions/runs/41455489252)
+both completed successfully. Source archive SHA-256:
+`8ab9304b23b87b1527b2c972c463269b59e096ad0b69dbe3b44beed7aa3dbd80`.
+The release includes a checksum file.
+
+The release browser artifact SHA-256 was independently matched after download:
+`fa7f2b7e10637f77fabb7cda5ea0f3c1b517e878fa90109a0bb246ebac1fbd68`.
+The corrected mobile capture was visually inspected with the live iframe showing
+both expense entries. The mobile interaction added 2.50 to the desktop 12.50,
+and the test verified 15.00 before capture. These are real fixture interactions,
+not a live AI demonstration or an accessibility certification.
