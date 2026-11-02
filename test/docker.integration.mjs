@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { fixture } from './helpers.mjs';
+import { Runner } from '../src/runner.mjs';
+test('Docker isolation, real tests, readonly Git, preview and cleanup', async (t) => {
+  const { ws } = await fixture(t);
+  const runner = new Runner();
+  t.after(() => runner.close());
+  const status = await runner.status();
+  assert.equal(status.available, true, JSON.stringify(status));
+  const tested = await runner.execute(ws, ws.test);
+  assert.equal(tested.code, 0, tested.output);
+  const identity = await runner.execute(ws, 'id -u');
+  assert.notEqual(identity.output.trim(), '0');
+  const write = await runner.execute(ws, 'touch /.commcode-test');
+  assert.notEqual(write.code, 0);
+  const gitWrite = await runner.execute(ws, 'touch .git/unauthorised');
+  assert.notEqual(gitWrite.code, 0);
+  const app = await runner.start(ws);
+  assert.equal(app.verified, true);
+  await runner.stop(ws.id);
+  assert.equal(runner.apps.size, 0);
+});

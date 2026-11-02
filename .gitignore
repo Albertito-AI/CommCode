@@ -1,0 +1,9 @@
+node_modules/
+.commcode/
+.env
+coverage/
+artifacts/
+web/editor.js
+web/editor.js.map
+*.tgz
+*.zip

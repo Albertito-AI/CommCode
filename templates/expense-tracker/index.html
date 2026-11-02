@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Community expenses</title>
+    <style>
+      body {
+        font:
+          15px/1.6 system-ui,
+          sans-serif;
+        background: #f7f5ee;
+        color: #23382c;
+        margin: 0;
+        padding: 28px;
+      }
+      h1 {
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: -0.6px;
+      }
+      small {
+        color: #52634e;
+      }
+      .total {
+        background: #23382c;
+        color: #d7f5b8;
+        padding: 22px;
+        border-radius: 10px;
+        margin: 24px 0;
+      }
+      .total strong {
+        display: block;
+        font-size: 34px;
+        font-weight: 500;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin: 12px 0 5px;
+      }
+      input {
+        font: inherit;
+        border: 1px solid #a6b29c;
+        border-radius: 5px;
+        padding: 9px;
+        width: 100%;
+        box-sizing: border-box;
+        background: white;
+      }
+      button {
+        background: #d2ecb5;
+        color: #243c23;
+        border: 0;
+        border-radius: 5px;
+        padding: 10px;
+        margin-top: 14px;
+        cursor: pointer;
+      }
+      li {
+        border-bottom: 1px solid #d8ddd0;
+        padding: 12px 0;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      ul {
+        list-style: none;
+        padding: 0;
+      }
+      #error {
+        color: #9a2b13;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <small>COMMUNITY TOOLKIT / 01</small>
+    <h1>Little expenses.<br />A clearer picture.</h1>
+    <p>Track a project’s everyday costs.</p>
+    <div class="total">Total recorded<strong id="total">0.00</strong></div>
+    <form id="form">
+      <label for="description">Description</label
+      ><input
+        id="description"
+        required
+        maxlength="120"
+        placeholder="Materials for the workshop"
+      /><label for="amount">Amount (your chosen currency)</label
+      ><input
+        id="amount"
+        type="number"
+        min="0.01"
+        step="0.01"
+        required
+        placeholder="0.00"
+      /><button>Add expense</button>
+      <p id="error" role="status"></p>
+    </form>
+    <ul id="items"></ul>
+    <button id="download" type="button">Download expenses as JSON</button>
+    <p>
+      <small
+        >This starter keeps data in memory. Download before refreshing. No account or external
+        service required.</small
+      >
+    </p>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

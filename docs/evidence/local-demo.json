@@ -1,0 +1,46 @@
+{
+  "execution": "Explicit trusted-local process adapter; not a Docker isolation test",
+  "ai": "Not invoked; no live model credential used",
+  "steps": [
+    {
+      "action": "create",
+      "head": "08c11dfa8a8af137f622fecc7476bcd2da7a2ed5"
+    },
+    {
+      "action": "test baseline",
+      "code": 0,
+      "output": "✔ adds amounts without a floating-point penny error (2.88963ms)\n✔ empty expense list has zero total (0.217932ms)\n✔ rejects empty descriptions, zero, negative and nonnumeric amounts (0.209557ms)\n✔ accepts a positive expense (1.544407ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 800.148261\n",
+      "timedOut": false,
+      "truncated": false,
+      "cancelled": false,
+      "durationMs": 1102
+    },
+    {
+      "action": "test actual edit",
+      "code": 0,
+      "output": "✔ adds amounts without a floating-point penny error (0.870923ms)\n✔ empty expense list has zero total (0.203521ms)\n✔ rejects empty descriptions, zero, negative and nonnumeric amounts (0.309375ms)\n✔ accepts a positive expense (0.169054ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 257.451175\n",
+      "timedOut": false,
+      "truncated": false,
+      "cancelled": false,
+      "durationMs": 455
+    },
+    {
+      "action": "verify HTTP runtime",
+      "running": true,
+      "verified": true,
+      "status": 200
+    },
+    {
+      "action": "inspect actual diff",
+      "diff": "diff --git a/index.html b/index.html\nindex ca130b8..6466467 100644\n--- a/index.html\n+++ b/index.html\n@@ -76,7 +76,7 @@\n   </head>\n   <body>\n     <small>COMMUNITY TOOLKIT / 01</small>\n-    <h1>Little expenses.<br />A clearer picture.</h1>\n+    <h1>Little expenses.<br />A shared purpose.</h1>\n     <p>Track a project’s everyday costs.</p>\n     <div class=\"total\">Total recorded<strong id=\"total\">0.00</strong></div>\n     <form id=\"form\">\n"
+    },
+    {
+      "action": "commit",
+      "sha": "3bcaaf8e1498486c9cdfc264f7101ba1a478fa6c"
+    },
+    {
+      "action": "verify activity ledger",
+      "valid": true
+    }
+  ]
+}

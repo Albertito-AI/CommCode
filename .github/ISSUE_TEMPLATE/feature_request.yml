@@ -1,0 +1,17 @@
+name: Feature proposal
+description: Describe a user problem and a useful outcome.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Who encounters this problem and what happens?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What outcome would help?
+  - type: textarea
+    id: ownership
+    attributes:
+      label: Portability, privacy and accessibility considerations

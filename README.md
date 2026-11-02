@@ -8,8 +8,9 @@ repositories. The platform is licensed under AGPL-3.0-or-later; the included
 starter templates are CC0-1.0. There is no paid feature gate, telemetry or mandatory
 AI subscription.
 
-**Development snapshot: 0.1.0-dev.1.** This is a single-operator local development
-release candidate, not a production cloud IDE. Read the [verification record](docs/VERIFICATION.md)
+**Development snapshot: 0.1.0-dev.1.** Public repository:
+[Albertito-AI/CommCode](https://github.com/Albertito-AI/CommCode). This is a
+single-operator local development release candidate, not a production cloud IDE. Read the [verification record](docs/VERIFICATION.md)
 for what was actually tested. A repository URL, release tag or workflow file is
 not evidence of publication or a successful CI run.
 

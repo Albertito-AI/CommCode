@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CommCode · Your ideas. Your code.</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/" aria-label="CommCode home"
+        ><span class="mark">c<span>c</span></span
+        ><strong>CommCode</strong></a
+      ><span class="tagline">The freedom to build.</span
+      ><span class="version">DEVELOPMENT PREVIEW · 0.1</span
+      ><button id="signout" class="quiet">Lock workspace</button>
+    </header>
+    <main id="login" class="welcome">
+      <p class="eyebrow">OPEN SOFTWARE CREATION</p>
+      <h1>Make something<br />that belongs to you.</h1>
+      <p>
+        A local-first workspace for writing, running and understanding software.<br />Your source
+        stays in an ordinary Git repository.
+      </p>
+      <form id="login-form">
+        <label for="token">Server access token</label>
+        <div class="inline">
+          <input
+            id="token"
+            type="password"
+            autocomplete="current-password"
+            required
+            placeholder="Paste the token from your server"
+          /><button>Open CommCode <span>↗</span></button>
+        </div>
+        <small
+          >Read the access-token file indicated in your server terminal. Your token stays in this
+          browser tab.</small
+        >
+      </form>
+      <div class="principles">
+        <span>01 &nbsp; Own your source</span><span>02 &nbsp; See every change</span
+        ><span>03 &nbsp; Verify the result</span>
+      </div>
+    </main>
+    <main id="workbench" hidden>
+      <div class="topline">
+        <div>
+          <p class="eyebrow">YOUR WORKBENCH</p>
+          <h1>Ideas become working code.</h1>
+        </div>
+        <div id="runtime" class="runtime">Checking runtime…</div>
+      </div>
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="section-head">
+            <h2>Workspaces</h2>
+            <button id="new-toggle" class="quiet" aria-label="Create workspace">＋</button>
+          </div>
+          <label class="sr-only" for="workspace">Choose workspace</label
+          ><select id="workspace">
+            <option value="">Create your first workspace</option>
+          </select>
+          <form id="create-form">
+            <label for="project-name">Project name</label
+            ><input
+              id="project-name"
+              placeholder="My community project"
+              required
+              maxlength="80"
+            /><label for="template">Starting point</label
+            ><select id="template">
+              <option value="expense-tracker">Expense tracker · JavaScript</option>
+              <option value="python-api">Small API · Python</option>
+              <option value="github">Import public GitHub repository</option></select
+            ><label id="repo-label" for="repo-url" hidden>Repository URL</label
+            ><input
+              id="repo-url"
+              type="url"
+              placeholder="https://github.com/owner/repository"
+              hidden
+            /><button class="wide">Create workspace</button>
+          </form>
+          <div class="section-head">
+            <h2>Source files</h2>
+            <button id="new-file" class="quiet" aria-label="Create file">＋</button>
+          </div>
+          <nav id="files" aria-label="Source files">
+            <p class="muted">Your files will appear here.</p>
+          </nav>
+          <div class="sidebar-foot">
+            <strong>Open by design.</strong>
+            <p>Export your Git history. Use any editor. Choose your own model.</p>
+            <button id="export" class="secondary wide">Export committed project ↓</button>
+          </div>
+        </aside>
+        <section class="workspace-content">
+          <div class="editor-toolbar">
+            <div>
+              <span class="dot"></span><strong id="filename">Start with a project</strong
+              ><span id="dirty" class="muted"></span>
+            </div>
+            <button id="save" class="secondary">Save <kbd>⌘/Ctrl S</kbd></button>
+          </div>
+          <div id="editor" aria-label="Source code editor">
+            <textarea
+              id="fallback"
+              aria-label="Source code"
+              spellcheck="false"
+              placeholder="Choose a file to begin."
+            ></textarea>
+          </div>
+          <div class="actions">
+            <button id="test" class="secondary">Run tests</button
+            ><button id="start">Run & preview ↗</button
+            ><button id="stop" class="quiet">Stop</button
+            ><button id="diff" class="quiet">Git diff</button
+            ><button id="commit" class="quiet">Commit</button
+            ><button id="ledger" class="quiet">Activity</button>
+          </div>
+          <details>
+            <summary>Commands & GitHub</summary>
+            <div class="settings">
+              <label>Test command<input id="test-command" placeholder="node --test" /></label
+              ><label>Start command<input id="start-command" placeholder="node server.mjs" /></label
+              ><label
+                >Dependency installation<input id="install-command" placeholder="npm ci"
+              /></label>
+              <div class="inline wrap">
+                <button id="configure" class="secondary">Save commands</button
+                ><button id="install" class="secondary">Install · network access</button
+                ><button id="github-create" class="quiet">Create public GitHub repo</button
+                ><button id="github-push" class="quiet">Push committed changes</button>
+              </div>
+              <p class="muted">
+                Commands execute with your authority. Installation grants temporary outbound network
+                access. The preview expects HTTP on PORT and HOST from the environment.
+              </p>
+            </div>
+          </details>
+          <div class="console-head">
+            <h2>Command console</h2>
+            <span id="job-status" aria-live="polite">Ready</span
+            ><button id="cancel" class="quiet" hidden>Cancel job</button>
+          </div>
+          <pre id="output" tabindex="0">
+Create or import a project to begin. Results appear here only after an operation runs.</pre
+          >
+          <form id="command-form" class="command">
+            <span aria-hidden="true">$</span
+            ><label class="sr-only" for="command">Shell command</label
+            ><input
+              id="command"
+              placeholder="Run a command in this workspace"
+              autocomplete="off"
+            /><button class="quiet">Run ↵</button>
+          </form>
+          <p class="console-note">
+            Bounded command console. Interactive programs and full-screen terminal apps are not
+            supported yet.
+          </p>
+        </section>
+        <aside class="right">
+          <div class="section-head">
+            <h2>Build with understanding</h2>
+            <span class="pill">AI ASSIST</span>
+          </div>
+          <p class="muted">
+            Describe a change. Review the proposed files before applying it. Tests run against your
+            configured command.
+          </p>
+          <label for="objective">What would you like to change?</label
+          ><textarea
+            id="objective"
+            rows="4"
+            placeholder="Add a category filter to the expense tracker. Preserve the current tests and explain the change."
+          ></textarea>
+          <div class="inline">
+            <button id="context" class="secondary">Review context</button
+            ><button id="propose">Plan a change ↗</button>
+          </div>
+          <label class="check"
+            ><input id="share-source" type="checkbox" />I authorise sending the reviewed source
+            context to the configured model.</label
+          >
+          <p id="provider" class="muted">Checking model configuration…</p>
+          <div id="proposal" hidden>
+            <h3>Proposed change</h3>
+            <div id="plan"></div>
+            <details>
+              <summary>Proposed file contents</summary>
+              <pre id="proposed-files"></pre>
+            </details>
+            <label for="repairs">Automatic repair attempts</label
+            ><select id="repairs">
+              <option value="0">0 · return to checkpoint on failure</option>
+              <option value="1">1 · allow one further model request</option>
+              <option value="2">2 · maximum two further requests</option>
+            </select>
+            <div class="inline">
+              <button id="apply">Apply & test</button
+              ><button id="rollback" class="secondary">Undo task edits</button>
+            </div>
+          </div>
+          <div class="preview-heading">
+            <h2>Application preview</h2>
+            <span id="preview-status" class="muted">Not running</span>
+          </div>
+          <div id="preview-empty">
+            <span class="preview-icon">⌘</span><strong>Your application, running.</strong>
+            <p>Start the project to see its actual output here.</p>
+          </div>
+          <iframe
+            id="preview"
+            title="Isolated application preview"
+            sandbox="allow-scripts allow-forms allow-downloads"
+            referrerpolicy="no-referrer"
+            hidden
+          ></iframe>
+          <p class="muted tiny">
+            Preview content has a separate origin and a browser sandbox. Relative asset URLs are
+            supported. WebSockets, redirects and POST requests are not supported in this release.
+          </p>
+        </aside>
+      </div>
+    </main>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <dialog id="viewer">
+      <div class="section-head">
+        <h2 id="viewer-title">Details</h2>
+        <button id="close-viewer" class="quiet" aria-label="Close details">✕</button>
+      </div>
+      <pre id="viewer-content" tabindex="0"></pre>
+    </dialog>
+    <footer>
+      <span>CommCode · technology people can own.</span
+      ><a href="https://github.com/Albertito-AI/CommCode" target="_blank" rel="noreferrer"
+        >Source & documentation ↗</a
+      >
+    </footer>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

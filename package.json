@@ -1,0 +1,31 @@
+{
+  "name": "commcode",
+  "version": "0.1.0-dev.1",
+  "private": true,
+  "type": "module",
+  "description": "An open, local-first software creation workbench with verifiable AI edits.",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/cli.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:docker": "node --test test/docker.integration.mjs",
+    "check": "node scripts/check.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "npm run check && npm run test && npm run build",
+    "demo": "node scripts/demo.mjs",
+    "setup:runtime": "docker build -f runtime.Dockerfile -t commcode-runtime:dev ."
+  },
+  "devDependencies": {
+    "@codemirror/lang-html": "6.4.11",
+    "@codemirror/lang-javascript": "6.2.4",
+    "@codemirror/lang-python": "6.2.1",
+    "codemirror": "6.0.2",
+    "esbuild": "0.25.12",
+    "prettier": "3.6.2"
+  }
+}
