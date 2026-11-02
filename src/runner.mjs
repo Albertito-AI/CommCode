@@ -2,6 +2,7 @@
 import { spawn } from 'node:child_process';
 import { run } from './process.mjs';
 import { Fault, id, redact } from './security.mjs';
+import { dockerPreview } from './docker-preview.mjs';
 
 export class Runner {
   constructor({ mode = 'docker', image = 'commcode-runtime:dev', secrets = [] } = {}) {
@@ -126,48 +127,40 @@ export class Runner {
       });
       this.apps.set(ws.id, app);
     } else {
-      const name = 'pw-app-' + ws.id,
-        network = name + '-net';
+      const name = 'pw-app-' + ws.id;
       await run('docker', ['rm', '-f', name], { timeout: 10000 });
-      await run('docker', ['network', 'rm', network], { timeout: 10000 });
-      const net = await run('docker', ['network', 'create', '--internal', network]);
-      if (net.code !== 0)
-        throw new Fault('Cannot create an isolated preview network: ' + net.output, 503);
       const result = await run('docker', [
         'run',
         '-d',
         ...this.flags(ws, name),
         '--network',
-        network,
-        '-p',
-        '127.0.0.1::8080',
+        'none',
         '-e',
         'PORT=8080',
         '-e',
-        'HOST=0.0.0.0',
+        'HOST=127.0.0.1',
         this.image,
         'sh',
         '-lc',
         ws.start,
       ]);
       if (result.code !== 0) {
-        await run('docker', ['network', 'rm', network]);
+        await run('docker', ['rm', '-f', name]);
         throw new Fault('Application startup failed: ' + result.output, 503);
       }
-      const mapping = await run('docker', ['port', name, '8080/tcp']);
-      const port = Number(mapping.output.trim().split(':').at(-1));
-      if (!Number.isInteger(port) || port < 1024) {
+      try {
+        const { relay, port } = await dockerPreview(name);
+        this.apps.set(ws.id, { name, relay, port, running: true });
+      } catch (e) {
         await run('docker', ['rm', '-f', name]);
-        await run('docker', ['network', 'rm', network]);
-        throw new Fault('Docker did not return a loopback preview port.', 503);
+        throw e;
       }
-      this.apps.set(ws.id, { name, network, port, running: true });
     }
     const app = this.apps.get(ws.id);
     for (let n = 0; n < 40; n++) {
       try {
         const r = await fetch(`http://127.0.0.1:${app.port}/`, {
-          signal: AbortSignal.timeout(500),
+          signal: AbortSignal.timeout(2000),
           redirect: 'manual',
         });
         await r.body?.cancel();
@@ -204,7 +197,7 @@ export class Runner {
       } catch {}
     } else {
       await run('docker', ['rm', '-f', app.name]);
-      await run('docker', ['network', 'rm', app.network]);
+      if (app.relay) await new Promise((resolve) => app.relay.close(resolve));
     }
     this.apps.delete(wsId);
   }

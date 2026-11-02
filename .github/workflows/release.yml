@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: npm
@@ -24,6 +24,14 @@ jobs:
       - run: npm audit --audit-level=high
       - run: npm run setup:runtime
       - run: npm run test:docker
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: browser-evidence
+          path: test-results/
+          retention-days: 7
       - name: Package exact source commit
         run: |
           git archive --format=tar.gz --prefix=CommCode/ --output=CommCode-source.tar.gz HEAD

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fixture } from './helpers.mjs';
 import { Runner } from '../src/runner.mjs';
+import { run } from '../src/process.mjs';
 test('Docker isolation, real tests, readonly Git, preview and cleanup', async (t) => {
   const { ws } = await fixture(t);
   const runner = new Runner();
@@ -17,7 +18,18 @@ test('Docker isolation, real tests, readonly Git, preview and cleanup', async (t
   const gitWrite = await runner.execute(ws, 'touch .git/unauthorised');
   assert.notEqual(gitWrite.code, 0);
   const app = await runner.start(ws);
-  assert.equal(app.verified, true);
+  assert.equal(app.verified, true, JSON.stringify(await runner.logs(ws.id)));
+  const running = runner.apps.get(ws.id);
+  const network = await run('docker', [
+    'inspect',
+    '--format',
+    '{{.HostConfig.NetworkMode}}',
+    running.name,
+  ]);
+  assert.equal(network.output.trim(), 'none');
+  const preview = await fetch('http://127.0.0.1:' + running.port + '/app.js');
+  assert.equal(preview.status, 200);
+  assert.match(await preview.text(), /validExpense/);
   await runner.stop(ws.id);
   assert.equal(runner.apps.size, 0);
 });

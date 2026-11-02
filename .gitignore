@@ -7,3 +7,5 @@ web/editor.js
 web/editor.js.map
 *.tgz
 *.zip
+test-results/
+playwright-report/

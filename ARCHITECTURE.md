@@ -50,7 +50,8 @@ GitHub credentials, arbitrary endpoints or deployment authority.
 ## Preview
 
 A second loopback server routes a random capability path to a registered runtime
-port. It accepts GET/HEAD, rejects redirects, limits response size and does not
+port. In Docker mode that port belongs to a host relay using fixed docker exec
+HTTP transport to container loopback; the container uses network=none. It accepts GET/HEAD, rejects redirects, limits response size and does not
 forward cookies or authentication headers. An opaque-origin iframe sandbox isolates
 application JavaScript from the workbench. Capabilities expire on stop/restart and
 are kept out of the activity ledger. They remain visible to the local operator.

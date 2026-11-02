@@ -4,3 +4,5 @@ LICENSE
 artifacts
 .commcode
 node_modules
+test-results
+playwright-report
