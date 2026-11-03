@@ -230,6 +230,12 @@ export async function createApp({
         if (action === 'file')
           return json(res, await workspaces.read(ws, url.searchParams.get('path')));
         if (action === 'logs') return json(res, await runner.logs(ws.id));
+        if (action === 'recovery') {
+          const activeApply = [...jobs.values()].some(
+            (job) => job.workspace === ws.id && job.type === 'apply' && job.state === 'running',
+          );
+          return json(res, await agent.recovery(ws, { activeApply }));
+        }
         if (action === 'ledger')
           return json(res, {
             events: await workspaces.ledger(ws).read(),
