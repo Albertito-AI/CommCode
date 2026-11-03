@@ -304,6 +304,13 @@ action('ledger', async () => {
   const r = await api(base() + 'ledger');
   show('Activity ledger · chain ' + (r.valid ? 'valid' : 'INVALID'), r.events);
 });
+action('recovery', async () => {
+  const r = await api(base() + 'recovery');
+  show('Recovery review · read-only', r);
+  if (r.truncated) notice('Recovery inventory truncated: inspect the workspace state separately.');
+  else if (r.tasks.length) notice('Interrupted or unreadable task records need human review.');
+  else notice('No interrupted task records were found in this bounded scan.');
+});
 action('context', async () => {
   const r = await api(base() + 'context');
   show('Exact source context eligible for the next model request', r);
