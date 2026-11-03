@@ -18,7 +18,7 @@ for the remaining environment-dependent acceptance checks.
 - Verify public GitHub clone, authenticated creation and non-forced push against a
   disposable authorised test repository.
 - Require all workflow jobs to pass on the exact release commit.
-- Add crash-recovery discovery for interrupted tasks and document recovery evidence.
+- Extend the initial read-only interrupted-task recovery inventory with disk/history budgets, idle cleanup and tested crash/restore scenarios (issue #7).
 
 ## v0.2
 
