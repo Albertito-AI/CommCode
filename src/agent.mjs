@@ -5,6 +5,31 @@ import { id, atomicJSON, safePath, hash, Fault, boundedString } from './security
 import { git } from './process.mjs';
 import { validateProposal } from './providers.mjs';
 
+function matchesRollbackTargets(applied, originals) {
+  if (
+    !applied ||
+    typeof applied !== 'object' ||
+    Array.isArray(applied) ||
+    !originals ||
+    typeof originals !== 'object' ||
+    Array.isArray(originals)
+  ) {
+    return false;
+  }
+  const keys = Object.keys(applied);
+  if (keys.length !== Object.keys(originals).length) return false;
+  return keys.every((name) => {
+    const digest = applied[name];
+    const original = originals[name];
+    return (
+      Object.hasOwn(originals, name) &&
+      typeof digest === 'string' &&
+      /^[0-9a-f]{64}$/.test(digest) &&
+      (typeof original === 'string' || original === null)
+    );
+  });
+}
+
 export class Agent {
   constructor(workspaces, runner, provider) {
     this.workspaces = workspaces;
@@ -25,6 +50,80 @@ export class Agent {
   }
   async save(ws, task) {
     await atomicJSON(this.taskPath(ws, task.id), task);
+  }
+  // Read-only startup/restart reconciliation. Never restore bytes automatically.
+  async recovery(ws, { activeApply = false } = {}) {
+    const base = path.dirname(ws.root);
+    const entries = (await fs.readdir(base, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && /^task-[0-9a-f-]{36}\.json$/.test(entry.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const limit = 200;
+    const head = (await git(ws.root, ['rev-parse', 'HEAD'])).trim();
+    const tasks = [];
+    for (const entry of entries.slice(0, limit)) {
+      const key = entry.name.slice(5, -5);
+      let record;
+      try {
+        const p = path.join(base, entry.name);
+        const st = await fs.lstat(p);
+        if (!st.isFile() || st.nlink !== 1 || st.size > 256 * 1024)
+          throw new Error('Invalid task record');
+        record = JSON.parse(await fs.readFile(p, 'utf8'));
+        if (record.id !== key || typeof record.state !== 'string')
+          throw new Error('Invalid task identity');
+      } catch {
+        tasks.push({
+          id: key,
+          state: 'unreadable',
+          finding: 'record_needs_manual_review',
+          canAttemptRollback: false,
+        });
+        continue;
+      }
+      if (!['applying', 'needs_review'].includes(record.state)) continue;
+      const files = [];
+      const applied = record.applied;
+      const appliedIsMap = applied && typeof applied === 'object' && !Array.isArray(applied);
+      const pairs = appliedIsMap ? Object.entries(applied) : [];
+      let exact = matchesRollbackTargets(applied, record.originals);
+      if (pairs.length === 0 || pairs.length > 100) exact = false;
+      for (const [name, digest] of pairs.slice(0, 100)) {
+        let result = 'changed_or_unavailable';
+        if (typeof digest === 'string' && /^[0-9a-f]{64}$/.test(digest)) {
+          try {
+            const p = await safePath(ws.root, name);
+            const current = await fs.readFile(p);
+            result = hash(current) === digest ? 'task_bytes_present' : 'changed_or_unavailable';
+          } catch {
+            // An absent, linked or protected path cannot be restored automatically.
+          }
+        }
+        if (result !== 'task_bytes_present') exact = false;
+        files.push({ path: name, finding: result });
+      }
+      if (pairs.length === 0) exact = false;
+      const headMatches = record.head === head;
+      const isActive = record.state === 'applying' && activeApply;
+      const canAttemptRollback = Boolean(exact && headMatches && !isActive);
+      tasks.push({
+        id: key,
+        state: record.state,
+        finding: isActive
+          ? 'possibly_running_in_this_session'
+          : canAttemptRollback
+            ? 'guarded_rollback_candidate'
+            : 'manual_review_required',
+        headMatches,
+        canAttemptRollback,
+        files,
+      });
+    }
+    return {
+      scanned: Math.min(entries.length, limit),
+      truncated: entries.length > limit,
+      tasks,
+      note: 'Read-only inventory. Inspect the original Git diff and task record before requesting a guarded rollback. No changes or container cleanup are performed.',
+    };
   }
   async propose(ws, objective, { signal, shareSource = false } = {}) {
     boundedString(objective, 'Objective', 4000);
@@ -87,6 +186,14 @@ export class Agent {
     }
   }
   async rollback(ws, task) {
+    // Fail closed if a stored task declares extra or malformed restoration targets.
+    // Recovery review is advisory: rollback must enforce the same boundary itself.
+    if (!matchesRollbackTargets(task.applied, task.originals)) {
+      throw new Fault(
+        'Rollback paused: task record contains invalid or unmatched restoration targets.',
+        409,
+      );
+    }
     if ((await git(ws.root, ['rev-parse', 'HEAD'])).trim() !== task.head)
       throw new Fault(
         'Git history changed after this task. Use ordinary Git review/revert to preserve later commits.',

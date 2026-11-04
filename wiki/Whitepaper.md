@@ -30,7 +30,7 @@ For trusted fixtures, an explicitly unsafe local process adapter supports develo
 
 The agent path begins from a clean worktree and a bounded context selection. A structured proposal names file changes. The operator reviews it before application. The programme checks for stale state, executes the configured tests and permits a bounded repair sequence. Rollback refuses to erase subsequent user edits or a later commit.
 
-This design treats recovery as a correctness problem. “Undo” is unsafe when it assumes nothing else has changed. Task records and an activity ledger make actions inspectable, but a local hash chain is not a tamper-proof external audit. Crash-recovery discovery, storage quotas and stronger operational guarantees remain work to do.
+This design treats recovery as a correctness problem. “Undo” is unsafe when it assumes nothing else has changed. Task records and an activity ledger make actions inspectable, but a local hash chain is not a tamper-proof external audit. A read-only interrupted-task inventory is now available; guarded rollback still requires review. Disk quotas and stronger operational guarantees remain work to do.
 
 Ollama and compatible-chat adapters exist. Protocol fixtures exercise their interfaces; they do not establish real model quality. The next live acceptance run should identify the actual model and configuration, preserve the proposal and test results, record cost and disclose any manual intervention. It must not quietly replace a difficult model failure with a scripted success.
 

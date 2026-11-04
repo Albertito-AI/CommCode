@@ -31,6 +31,10 @@ for the measured scope and remaining stable-release gates.
 - Ollama and OpenAI-compatible protocol adapters tested against local HTTP fixtures.
   Live inference requires an operator-configured model and remains unverified here.
 
+A [read-only recovery review](docs/RECOVERY.md) inventories interrupted AI
+records and compares recorded file digests and Git HEAD before a human chooses
+any guarded rollback. It does not yet impose disk quotas or idle suspension.
+
 ## Runtime and remaining acceptance work
 
 Docker execution is the default and never silently falls back to host execution.
