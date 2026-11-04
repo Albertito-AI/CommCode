@@ -55,11 +55,22 @@ export class Agent {
       const applied = record.applied;
       let exact = applied && typeof applied === 'object' && !Array.isArray(applied);
       const pairs = exact ? Object.entries(applied) : [];
+      const originals = record.originals;
+      const originalKeys =
+        originals && typeof originals === 'object' && !Array.isArray(originals)
+          ? Object.keys(originals)
+          : [];
       if (
         pairs.length > 100 ||
-        !record.originals ||
-        typeof record.originals !== 'object' ||
-        !pairs.every(([name]) => Object.hasOwn(record.originals, name))
+        !originals ||
+        typeof originals !== 'object' ||
+        Array.isArray(originals) ||
+        originalKeys.length !== pairs.length ||
+        !pairs.every(
+          ([name]) =>
+            Object.hasOwn(originals, name) &&
+            (typeof originals[name] === 'string' || originals[name] === null),
+        )
       ) exact = false;
       for (const [name, digest] of pairs.slice(0, 100)) {
         let result = 'changed_or_unavailable';
@@ -160,6 +171,32 @@ export class Agent {
     }
   }
   async rollback(ws, task) {
+    // Fail closed if a stored task declares extra or malformed restoration targets.
+    // Recovery review is advisory: rollback must enforce the same boundary itself.
+    const applied = task.applied;
+    const originals = task.originals;
+    const validMaps =
+      applied &&
+      typeof applied === 'object' &&
+      !Array.isArray(applied) &&
+      originals &&
+      typeof originals === 'object' &&
+      !Array.isArray(originals);
+    if (
+      !validMaps ||
+      Object.keys(applied).length !== Object.keys(originals).length ||
+      !Object.entries(applied).every(
+        ([name, digest]) =>
+          typeof digest === 'string' &&
+          /^[0-9a-f]{64}$/.test(digest) &&
+          Object.hasOwn(originals, name) &&
+          (typeof originals[name] === 'string' || originals[name] === null),
+      )
+    )
+      throw new Fault(
+        'Rollback paused: task record contains invalid or unmatched restoration targets.',
+        409,
+      );
     if ((await git(ws.root, ['rev-parse', 'HEAD'])).trim() !== task.head)
       throw new Fault(
         'Git history changed after this task. Use ordinary Git review/revert to preserve later commits.',
