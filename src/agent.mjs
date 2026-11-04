@@ -47,7 +47,12 @@ export class Agent {
         if (record.id !== key || typeof record.state !== 'string')
           throw new Error('Invalid task identity');
       } catch {
-        tasks.push({ id: key, state: 'unreadable', finding: 'record_needs_manual_review', canAttemptRollback: false });
+        tasks.push({
+          id: key,
+          state: 'unreadable',
+          finding: 'record_needs_manual_review',
+          canAttemptRollback: false,
+        });
         continue;
       }
       if (!['applying', 'needs_review'].includes(record.state)) continue;
