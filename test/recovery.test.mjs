@@ -50,6 +50,33 @@ test('restarted workbench offers read-only guarded recovery for matching task by
   assert.deepEqual((await fresh.recovery(ws)).tasks, []);
 });
 
+test('unexpected or malformed originals never qualify for rollback', async (t) => {
+  const { ws, workspaces, runner } = await fixture(t);
+  const a = agent(workspaces, runner);
+  const p = path.join(ws.root, 'README.md');
+  const before = await fs.readFile(p, 'utf8');
+  const added = before + '\\nAgent change';
+  const head = (await workspaces.inspect(ws)).head;
+  const untouched = path.join(ws.root, 'untouched.txt');
+  await fs.writeFile(untouched, 'A user file');
+  await fs.writeFile(p, added);
+
+  for (const originals of [
+    { 'README.md': before, 'untouched.txt': 'stale content' },
+    { 'README.md': 42 },
+    ['untrusted array'],
+  ]) {
+    const item = interrupted(ws, { 'README.md': hash(added) }, { head, originals });
+    await persist(ws, item);
+    const review = (await a.recovery(ws)).tasks[0];
+    assert.equal(review.finding, 'manual_review_required');
+    assert.equal(review.canAttemptRollback, false);
+    await assert.rejects(a.rollback(ws, await a.read(ws, item.id)), /task record/);
+    assert.equal(await fs.readFile(untouched, 'utf8'), 'A user file');
+    assert.equal(await fs.readFile(p, 'utf8'), added);
+  }
+});
+
 test('partial writes and later user edits stay untouched and require manual review', async (t) => {
   const { ws, workspaces, runner } = await fixture(t);
   const a = agent(workspaces, runner);
