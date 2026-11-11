@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 import { run } from './process.mjs';
 import { Fault, id, redact } from './security.mjs';
 import { dockerPreview } from './docker-preview.mjs';
+import { WorkspaceBudget } from './workspace-budget.mjs';
+import { ContainerOwnership, removeContainer } from './container-ownership.mjs';
 
 export class Runner {
   constructor({
@@ -10,11 +13,16 @@ export class Runner {
     image = 'commcode-runtime:dev',
     secrets = [],
     idleTimeoutMs = 15 * 60 * 1000,
+    budget = new WorkspaceBudget(),
+    docker = run,
   } = {}) {
     this.mode = mode;
     this.image = image;
     this.secrets = secrets;
     this.apps = new Map();
+    this.budget = budget;
+    this.docker = docker;
+    this.ownership = null;
     if (!Number.isSafeInteger(idleTimeoutMs) || idleTimeoutMs < 1000)
       throw new Fault('Preview idle timeout must be at least 1000 milliseconds.');
     this.idleTimeoutMs = idleTimeoutMs;
@@ -23,12 +31,12 @@ export class Runner {
   async status() {
     if (this.mode === 'process')
       return { available: true, isolation: 'NONE: explicit trusted-local development mode' };
-    const r = await run('docker', ['info', '--format', '{{json .SecurityOptions}}'], {
+    const r = await this.docker('docker', ['info', '--format', '{{json .SecurityOptions}}'], {
       timeout: 5000,
     }).catch((e) => ({ code: -1, output: e.message }));
     const img =
       r.code === 0
-        ? await run('docker', ['image', 'inspect', this.image], { timeout: 5000 })
+        ? await this.docker('docker', ['image', 'inspect', this.image], { timeout: 5000 })
         : { code: -1 };
     return {
       available: r.code === 0 && img.code === 0,
@@ -40,10 +48,33 @@ export class Runner {
           : r.output,
     };
   }
+  async ownerFor(ws) {
+    if (!this.ownership)
+      this.ownership = await ContainerOwnership.create(
+        path.dirname(path.dirname(ws.root)),
+        this.instance,
+        this.docker,
+      );
+    return this.ownership;
+  }
+  async resources(ws) {
+    if (this.mode !== 'docker')
+      return {
+        available: false,
+        resources: [],
+        detail: 'Container recovery applies to Docker mode.',
+      };
+    return { available: true, resources: await (await this.ownerFor(ws)).inventory(ws) };
+  }
+  async cleanup(ws, container) {
+    if (this.mode !== 'docker') throw new Fault('Container cleanup requires Docker mode.');
+    return (await this.ownerFor(ws)).cleanup(ws, container);
+  }
   flags(ws, name) {
     return [
       '--name',
       name,
+      ...this.ownership.labels(ws, name.startsWith('pw-app-') ? 'app' : 'job'),
       '--init',
       '--read-only',
       '--cap-drop=ALL',
@@ -69,7 +100,14 @@ export class Runner {
       'PIP_CACHE_DIR=/tmp/pip',
     ];
   }
-  async execute(ws, command, { network = false, signal, timeout = 120000 } = {}) {
+  async execute(ws, command, { signal, ...options } = {}) {
+    return this.budget.execute(
+      ws,
+      (guardedSignal) => this.executeCommand(ws, command, { ...options, signal: guardedSignal }),
+      signal,
+    );
+  }
+  async executeCommand(ws, command, { network = false, signal, timeout = 120000 } = {}) {
     if (this.apps.has(ws.id))
       throw new Fault(
         'Stop the application before editing, testing or installing dependencies.',
@@ -83,9 +121,10 @@ export class Runner {
         secrets: this.secrets,
         env: { HOME: '/tmp', PYTHONDONTWRITEBYTECODE: '1' },
       });
+    await this.ownerFor(ws);
     const name = 'pw-job-' + this.instance + '-' + id();
     try {
-      return await run(
+      return await this.docker(
         'docker',
         [
           'run',
@@ -101,10 +140,11 @@ export class Runner {
         { timeout, signal, secrets: this.secrets },
       );
     } finally {
-      await run('docker', ['rm', '-f', name], { timeout: 10000 }).catch(() => {});
+      await this.docker('docker', ['rm', '-f', name], { timeout: 10000 }).catch(() => {});
     }
   }
   async start(ws) {
+    await this.budget.admit(ws);
     await this.stop(ws.id);
     if (this.mode === 'process') {
       // Trusted fixtures only. Production has no automatic fallback to this adapter.
@@ -121,7 +161,7 @@ export class Runner {
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-      const app = { port, child, log: '', running: true, lastUsedAt: Date.now() };
+      const app = { port, child, log: '', running: true, lastUsedAt: Date.now(), workspace: ws };
       const collect = (d) => {
         app.log = redact((app.log + d.toString()).slice(-65536), this.secrets);
       };
@@ -136,8 +176,9 @@ export class Runner {
       });
       this.apps.set(ws.id, app);
     } else {
+      await this.ownerFor(ws);
       const name = 'pw-app-' + this.instance + '-' + id();
-      const result = await run('docker', [
+      const result = await this.docker('docker', [
         'run',
         '-d',
         ...this.flags(ws, name),
@@ -153,14 +194,25 @@ export class Runner {
         ws.start,
       ]);
       if (result.code !== 0) {
-        await run('docker', ['rm', '-f', name]);
+        await this.docker('docker', ['rm', '-f', name]);
         throw new Fault('Application startup failed: ' + result.output, 503);
       }
       try {
+        const container = result.output.trim().split('\n').at(-1);
+        if (!/^[0-9a-f]{64}$/.test(container))
+          throw new Fault('Docker did not return an immutable container identity.', 503);
         const { relay, port } = await dockerPreview(name);
-        this.apps.set(ws.id, { name, relay, port, running: true, lastUsedAt: Date.now() });
+        this.apps.set(ws.id, {
+          name,
+          container,
+          relay,
+          port,
+          running: true,
+          lastUsedAt: Date.now(),
+          workspace: ws,
+        });
       } catch (e) {
-        await run('docker', ['rm', '-f', name]);
+        await this.docker('docker', ['rm', '-f', name]);
         throw e;
       }
     }
@@ -187,13 +239,17 @@ export class Runner {
     const app = this.apps.get(wsId);
     if (!app) return { running: false, output: '' };
     if (app.child) return { running: app.running, output: app.log };
-    const r = await run('docker', ['logs', '--tail', '100', app.name], {
+    const r = await this.docker('docker', ['logs', '--tail', '100', app.name], {
       timeout: 5000,
       secrets: this.secrets,
     });
-    const st = await run('docker', ['inspect', '--format', '{{.State.Running}}', app.name], {
-      timeout: 5000,
-    });
+    const st = await this.docker(
+      'docker',
+      ['inspect', '--format', '{{.State.Running}}', app.name],
+      {
+        timeout: 5000,
+      },
+    );
     return { running: st.output.trim() === 'true', output: r.output };
   }
   touch(wsId) {
@@ -203,7 +259,13 @@ export class Runner {
   async suspendIdle(now = Date.now()) {
     const stopped = [];
     for (const [key, app] of this.apps) {
-      if (now - app.lastUsedAt >= this.idleTimeoutMs) {
+      let overBudget = false;
+      try {
+        await this.budget.admit(app.workspace);
+      } catch {
+        overBudget = true;
+      }
+      if (overBudget || now - app.lastUsedAt >= this.idleTimeoutMs) {
         await this.stop(key, app);
         if (!this.apps.has(key)) stopped.push(key);
       }
@@ -218,7 +280,7 @@ export class Runner {
         process.kill(-app.child.pid, 'SIGKILL');
       } catch {}
     } else {
-      await run('docker', ['rm', '-f', app.name]);
+      await removeContainer(app.container || app.name, this.docker);
       if (app.relay) await new Promise((resolve) => app.relay.close(resolve));
     }
     if (this.apps.get(wsId) === app) this.apps.delete(wsId);

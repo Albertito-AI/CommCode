@@ -35,8 +35,10 @@ A [read-only recovery review](docs/RECOVERY.md) inventories interrupted AI
 records and compares recorded file digests and Git HEAD before a human chooses
 any guarded rollback. Task history now has count and byte limits, a server lock
 prevents two cooperating servers from sharing a data directory, and idle previews
-stop after 15 minutes without preview requests. Whole-workspace filesystem quotas
-remain a separate host requirement; see the [storage boundaries](docs/RECOVERY.md).
+stop after 15 minutes without preview requests. A 512 MiB workspace application budget reserves 16 MiB for recovery and checks
+ordinary writes and commands. Recovery review also offers explicitly confirmed
+cleanup of verified prior-instance containers. Hard filesystem quotas remain a
+host requirement; see the [storage boundaries](docs/RECOVERY.md).
 
 ## Runtime and remaining acceptance work
 

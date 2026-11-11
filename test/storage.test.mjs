@@ -11,6 +11,8 @@ import { acquireServerLease } from '../src/server-lease.mjs';
 import { atomicJSON, hash, id, token } from '../src/security.mjs';
 import { git } from '../src/process.mjs';
 import { createApp } from '../src/server.mjs';
+import { Runner } from '../src/runner.mjs';
+import { WorkspaceBudget } from '../src/workspace-budget.mjs';
 import { fixture } from './helpers.mjs';
 
 test('a failed atomic record replacement removes only its own temporary file', async (t) => {
@@ -167,4 +169,191 @@ test('preview activity delays idle suspension; an idle application is stopped wi
   assert.deepEqual(await runner.suspendIdle(touched + 1000), [ws.id]);
   assert.equal(runner.apps.has(ws.id), false);
   assert.equal(await fs.readFile(path.join(ws.root, 'README.md'), 'utf8'), before);
+});
+
+test('workspace budget counts Git, dependencies and metadata but never follows an external link', async (t) => {
+  const { ws, workspaces } = await fixture(t);
+  const before = await workspaces.budget.usage(ws);
+  const outside = path.join(os.tmpdir(), 'commcode-outside-' + id());
+  t.after(() => fs.rm(outside, { force: true }));
+  await fs.writeFile(outside, 'x'.repeat(1024 * 1024));
+  await fs.mkdir(path.join(ws.root, 'node_modules'));
+  await fs.writeFile(path.join(ws.root, 'node_modules', 'fixture'), 'x'.repeat(4096));
+  await fs.writeFile(path.join(path.dirname(ws.root), 'activity-fixture.json'), '{}');
+  await fs.symlink(outside, path.join(ws.root, 'external-link'));
+  const after = await workspaces.budget.usage(ws);
+  assert.equal(after.bytes - before.bytes, 4096 + 2 + Buffer.byteLength(outside));
+  assert.ok(before.bytes > 0, 'Existing Git/source bytes were included');
+});
+
+test('ordinary writes stop before the workspace reserve while an existing-file rollback remains available', async (t) => {
+  const { ws, workspaces, runner } = await fixture(t);
+  const source = path.join(ws.root, 'README.md');
+  const before = await fs.readFile(source, 'utf8');
+  const after = before + '\nA recoverable edit';
+  const agent = new Agent(workspaces, runner, {});
+  const task = {
+    id: id(),
+    state: 'applying',
+    head: (await workspaces.inspect(ws)).head,
+    applied: { 'README.md': hash(after) },
+    originals: { 'README.md': before },
+  };
+  await agent.save(ws, task);
+  await fs.writeFile(source, after);
+  const used = (await workspaces.budget.usage(ws)).bytes;
+  workspaces.budget = new WorkspaceBudget({
+    bytes: used + 4096,
+    recoveryReserve: 4096,
+    entries: 100000,
+  });
+  await assert.rejects(
+    workspaces.write(ws, { path: 'new.txt', content: 'Denied', etag: null }),
+    /storage budget/,
+  );
+  assert.equal(await fs.readFile(source, 'utf8'), after);
+  await assert.rejects(fs.stat(path.join(ws.root, 'new.txt')), { code: 'ENOENT' });
+  await agent.rollback(ws, await agent.read(ws, task.id));
+  assert.equal(await fs.readFile(source, 'utf8'), before);
+  assert.equal((await agent.read(ws, task.id)).state, 'rolled_back');
+  assert.ok((await workspaces.budget.usage(ws)).bytes <= workspaces.budget.limits.bytes);
+});
+
+test('a real short command that overshoots the budget fails visibly and preserves its files for review', async (t) => {
+  const { ws, workspaces, runner } = await fixture(t);
+  const used = (await workspaces.budget.usage(ws)).bytes;
+  runner.budget = new WorkspaceBudget({
+    bytes: used + 8192,
+    recoveryReserve: 4096,
+    entries: 100000,
+  });
+  const result = await runner.execute(
+    ws,
+    "node -e \"require('fs').writeFileSync('overshoot.txt', 'x'.repeat(5000))\"",
+  );
+  assert.notEqual(result.code, 0);
+  assert.equal(result.budgetExceeded, true);
+  assert.equal((await fs.stat(path.join(ws.root, 'overshoot.txt'))).size, 5000);
+  await assert.rejects(runner.execute(ws, 'node --version'), /storage budget/);
+});
+
+test('a continuing command is aborted after a sampled workspace overshoot', async (t) => {
+  const { ws, workspaces, runner } = await fixture(t);
+  const used = (await workspaces.budget.usage(ws)).bytes;
+  runner.budget = new WorkspaceBudget({
+    bytes: used + 8192,
+    recoveryReserve: 4096,
+    entries: 100000,
+  });
+  const result = await runner.execute(
+    ws,
+    "node -e \"require('fs').writeFileSync('overshoot.txt', 'x'.repeat(5000)); setInterval(()=>{},1000)\"",
+    { timeout: 10000 },
+  );
+  assert.equal(result.budgetExceeded, true);
+  assert.equal(result.cancelled, true);
+  assert.equal(result.timedOut, false);
+});
+
+test('Docker removal failures remain tracked until absence is confirmed by the daemon adapter', async (t) => {
+  const { ws } = await fixture(t);
+  let absent = false;
+  const container = 'a'.repeat(64);
+  const runner = new Runner({
+    docker: async (_bin, args) =>
+      args[0] === 'rm'
+        ? { code: 1, output: 'Labelled daemon fixture: removal failed' }
+        : { code: 0, output: absent ? '' : container + '\n' },
+  });
+  const app = { container, name: 'owned-fixture' };
+  runner.apps.set(ws.id, app);
+  await assert.rejects(runner.stop(ws.id), /remains available/);
+  assert.equal(runner.apps.get(ws.id), app);
+  absent = true;
+  await runner.stop(ws.id);
+  assert.equal(runner.apps.has(ws.id), false);
+});
+
+test('an old idle sweep cannot revoke the capability of a restarted real preview', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'commcode-capability-'));
+  const key = token();
+  const app = await createApp({ root, token: key, mode: 'process', port: 0, previewPort: 0 });
+  t.after(async () => {
+    await app.close();
+    await fs.rm(root, { recursive: true, force: true });
+  });
+  const call = async (route, data) => {
+    const response = await fetch(app.url + '/api/' + route, {
+      method: data ? 'POST' : 'GET',
+      headers: {
+        Authorization: 'Bearer ' + key,
+        ...(data ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: data ? JSON.stringify(data) : undefined,
+    });
+    assert.equal(response.ok, true);
+    return response.json();
+  };
+  const workspace = await call('workspaces', { name: 'Preview race' });
+  const start = async () => {
+    const job = await call('workspaces/' + workspace.id + '/start', {});
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const record = await call('jobs/' + job.id);
+      if (record.state === 'done') return record.result;
+      if (record.state === 'failed') throw new Error(record.error);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error('Preview job did not complete');
+  };
+  await start();
+  let release, stopped;
+  const released = new Promise((resolve) => {
+    release = resolve;
+  });
+  const stoppedSignal = new Promise((resolve) => {
+    stopped = resolve;
+  });
+  const original = app.runner.suspendIdle.bind(app.runner);
+  app.runner.suspendIdle = async () => {
+    const result = await original(Date.now() + app.runner.idleTimeoutMs);
+    stopped();
+    await released;
+    return result;
+  };
+  const sweep = app.sweepIdle();
+  await stoppedSignal;
+  const restarted = await start();
+  release();
+  await sweep;
+  const response = await fetch(restarted.url);
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /Community expenses/);
+});
+
+test('cancelling a real test process rolls back task bytes and retains unrelated command output files', async (t) => {
+  const { ws, workspaces, runner } = await fixture(t);
+  ws.test =
+    "node -e \"require('fs').writeFileSync('test-ready.txt', 'keep'); setInterval(()=>{},1000)\"";
+  const before = await fs.readFile(path.join(ws.root, 'README.md'), 'utf8');
+  const agent = new Agent(workspaces, runner, {
+    info: () => ({ kind: 'deterministic fixture' }),
+    propose: async () => ({
+      plan: ['Cancellation regression'],
+      explanation: 'Fixture, not a live model.',
+      files: [{ path: 'README.md', content: before + '\nTask edit' }],
+    }),
+  });
+  const task = await agent.propose(ws, 'Cancellation fixture', { shareSource: true });
+  const controller = new AbortController();
+  const applying = agent.apply(ws, task.id, { signal: controller.signal });
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (await fs.stat(path.join(ws.root, 'test-ready.txt')).catch(() => null)) break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  controller.abort();
+  const result = await applying;
+  assert.equal(result.state, 'rolled_back');
+  assert.equal(result.attempts[0].cancelled, true);
+  assert.equal(await fs.readFile(path.join(ws.root, 'README.md'), 'utf8'), before);
+  assert.equal(await fs.readFile(path.join(ws.root, 'test-ready.txt'), 'utf8'), 'keep');
 });

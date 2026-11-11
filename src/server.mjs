@@ -2,6 +2,7 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Workspaces } from './workspaces.mjs';
 import { Runner } from './runner.mjs';
@@ -81,7 +82,7 @@ async function createOwnedApp({
   const secrets = [token, provider.key, github.token].filter(Boolean);
   const workspaces = new Workspaces(path.join(root, 'workspaces'), secrets);
   await workspaces.init();
-  const runner = new Runner({ mode, secrets, idleTimeoutMs }),
+  const runner = new Runner({ mode, secrets, idleTimeoutMs, budget: workspaces.budget }),
     agent = new Agent(workspaces, runner, provider),
     jobs = new Map(),
     capabilities = new Map();
@@ -249,6 +250,8 @@ async function createOwnedApp({
         if (action === 'file')
           return json(res, await workspaces.read(ws, url.searchParams.get('path')));
         if (action === 'logs') return json(res, await runner.logs(ws.id));
+        if (action === 'resources') return json(res, await runner.resources(ws));
+        if (action === 'storage') return json(res, await workspaces.budget.usage(ws));
         if (action === 'recovery') {
           const activeApply = [...jobs.values()].some(
             (job) => job.workspace === ws.id && job.type === 'apply' && job.state === 'running',
@@ -263,19 +266,31 @@ async function createOwnedApp({
         if (action.startsWith('tasks/')) return json(res, await agent.read(ws, action.slice(6)));
         if (action === 'export') {
           // Standard Git bundle includes committed history, portable without CommCode.
-          const target = path.join(path.dirname(ws.root), 'export.bundle');
-          await workspaces.exclusive(ws, () => git(ws.root, ['bundle', 'create', target, '--all']));
-          res.writeHead(200, {
-            'Content-Type': 'application/octet-stream',
-            'Content-Disposition': 'attachment; filename="commcode-project.bundle"',
-            'Cache-Control': 'no-store',
-          });
-          return res.end(await fs.readFile(target));
+          const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'commcode-export-'));
+          const target = path.join(directory, 'export.bundle');
+          try {
+            await workspaces.exclusive(ws, () =>
+              git(ws.root, ['bundle', 'create', target, '--all']),
+            );
+            res.writeHead(200, {
+              'Content-Type': 'application/octet-stream',
+              'Content-Disposition': 'attachment; filename="commcode-project.bundle"',
+              'Cache-Control': 'no-store',
+            });
+            return res.end(await fs.readFile(target));
+          } finally {
+            await fs.rm(directory, { recursive: true, force: true });
+          }
         }
         throw new Fault('Not found.', 404);
       }
       if (req.method !== 'POST') throw new Fault('Method not allowed.', 405);
       const data = await body(req);
+      if (action === 'cleanup-container') {
+        if (data.confirm !== true)
+          throw new Fault('Review the container and explicitly confirm cleanup.');
+        return json(res, await runner.cleanup(ws, data.container));
+      }
       if (action === 'stop') {
         await runner.stop(ws.id);
         for (const [cap, key] of capabilities) if (key === ws.id) capabilities.delete(cap);
@@ -381,17 +396,16 @@ async function createOwnedApp({
     preview.close();
     throw e;
   }
+  async function sweepIdle() {
+    const stopped = await runner.suspendIdle();
+    for (const [cap, key] of capabilities)
+      if (stopped.includes(key) && !runner.apps.has(key)) capabilities.delete(cap);
+  }
   const idleTimer = setInterval(
     () => {
-      runner
-        .suspendIdle()
-        .then((stopped) => {
-          for (const [cap, key] of capabilities)
-            if (stopped.includes(key)) capabilities.delete(cap);
-        })
-        .catch(() => {
-          /* Keep the app tracked; a later sweep or explicit stop can retry. */
-        });
+      sweepIdle().catch(() => {
+        /* Keep the app tracked; a later sweep or explicit stop can retry. */
+      });
     },
     Math.min(30000, idleTimeoutMs),
   );
@@ -403,6 +417,7 @@ async function createOwnedApp({
     runner,
     agent,
     jobs,
+    sweepIdle,
     async close() {
       clearInterval(idleTimer);
       for (const j of jobs.values()) j.controller.abort();

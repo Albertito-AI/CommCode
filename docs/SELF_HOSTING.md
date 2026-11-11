@@ -22,8 +22,9 @@ records and uncommitted edits require a data-directory backup.
 Startup refuses an existing `.server.lock`. After an unclean exit, inspect the
 recorded host/process and runtime resources before manually removing a stale lock;
 never remove a live server's lock to start a competing instance. Task JSON storage
-is bounded, while source, Git, dependencies and activity logs still need host disk
-limits. Unused previews stop after 15 minutes without preview requests. See the
+is bounded, and the 512 MiB workspace application budget includes source, Git,
+dependencies and activity logs, with a 16 MiB recovery reserve. Sampled command
+checks cannot replace hard host filesystem quotas. Unused previews stop after 15 minutes without preview requests. See the
 [recovery guide](RECOVERY.md) for exact limits and safe manual steps.
 
 Use rootless Docker where practical. Confirm memory/CPU/PID limits actually take

@@ -11,4 +11,8 @@ An exclusive server lock now refuses a second cooperating server on the same dat
 directory and requires manual inspection after an unclean exit. Task history has
 explicit admission and byte limits, with no automatic deletion of recovery records.
 This does not enable concurrent server processes or hostile multi-user access.
-Whole-workspace quotas and distributed coordination remain separate work.
+A 512 MiB application budget counts the full workspace and reserves 16 MiB from
+ordinary operations. Commands are sampled and checked after execution; this is
+not a kernel quota against arbitrary host writes. Container cleanup requires
+re-inspection of canonical directory ownership, immutable identity and bind mount.
+Hard filesystem quotas and distributed coordination remain separate host work.

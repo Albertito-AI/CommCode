@@ -6,6 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { createApp } from '../src/server.mjs';
 import { token } from '../src/security.mjs';
+import { WorkspaceBudget } from '../src/workspace-budget.mjs';
 test('authenticated end-to-end workspace, console, preview, commit and export', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'commcode-api-')),
     key = token();
@@ -46,6 +47,9 @@ test('authenticated end-to-end workspace, console, preview, commit and export', 
   const created = await call('workspaces', { name: 'Real demo' });
   assert.equal(created.status, 201);
   const base = 'workspaces/' + created.data.id + '/';
+  assert.equal((await fetch(app.url + '/api/' + base + 'resources')).status, 401);
+  assert.equal((await call(base + 'cleanup-container', { container: 'a'.repeat(64) })).status, 400);
+  assert.equal((await call(base + 'resources')).data.available, false);
   const wait = async (key) => {
     for (let n = 0; n < 200; n++) {
       const r = (await call('jobs/' + key)).data;
@@ -74,11 +78,25 @@ test('authenticated end-to-end workspace, console, preview, commit and export', 
   await call(base + 'file', { path: 'user.txt', content: 'A real edit', etag: null });
   const committed = await call(base + 'commit', { message: 'Add a verified edit' });
   assert.equal(committed.data.sha.length, 40);
+  const storedWorkspace = await app.workspaces.get(created.data.id);
+  const used = (await app.workspaces.budget.usage(storedWorkspace)).bytes;
+  app.workspaces.budget = new WorkspaceBudget({
+    bytes: used + 4096,
+    recoveryReserve: 4096,
+    entries: 100000,
+  });
+  assert.equal(
+    (await call(base + 'file', { path: 'over-budget.txt', content: 'blocked', etag: null })).status,
+    409,
+  );
   const bundle = await fetch(app.url + '/api/' + base + 'export', {
     headers: { Authorization: 'Bearer ' + key },
   });
   assert.equal(bundle.status, 200);
   assert.ok((await bundle.arrayBuffer()).byteLength > 100);
+  await assert.rejects(fs.stat(path.join(path.dirname(storedWorkspace.root), 'export.bundle')), {
+    code: 'ENOENT',
+  });
   const ledger = await call(base + 'ledger');
   assert.equal(ledger.data.valid, true);
   assert.ok(ledger.data.events.some((e) => e.type === 'git.committed'));

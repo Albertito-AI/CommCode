@@ -11,22 +11,36 @@ earlier 256 KiB inspection mismatch. A cooperating-server filesystem lock and
 idle preview suspension have been added; container names are scoped to a runner
 instance rather than only a workspace.
 
-On Node 24.22.1, `npm run verify` passed syntax checks, all 41 unit/API/integration
-tests with no skips, and the editor build. `npm run format:check` passed. Eight new
-tests cover full history before model calls, preservation of records, recovery
-headroom, linked records, oversized originals before source writes, recovery
-above the old scan limit, exclusive server startup, a killed lease-holder process,
-idle preview stopping and failed temporary-file cleanup. These are controlled
-software tests, including actual local processes, not independent operator use.
+The 512 MiB workspace application budget includes source, Git, dependencies and
+metadata, with a 16 MiB reserve. It refuses ordinary writes at the threshold,
+checks command/import execution before and after running and samples continuing
+commands. Prior-instance container cleanup rechecks exact IDs, canonical-directory
+ownership labels and bind sources, and refuses current or mismatched resources.
+The recovery UI exposes storage and container review separately from task rollback.
+
+On Node 24.22.1, `npm run verify` passed syntax checks, all 48 unit/API/integration
+tests with no skips, and the editor build. `npm run format:check` passed. The 15
+added tests include original-data preflight, record preservation, exclusive
+startup, a killed lease-holder process, idle shutdown, real command overshoot and
+termination, cancellation with guarded restore, reserved-space rollback and a
+real HTTP preview restart/capability race. A labelled daemon adapter exercises
+failed-removal tracking and confirmed absence; it is not a real Docker test.
+The API suite also checks authenticated recovery access and successful export
+when normal writes have reached their budget. Existing partial-write and later
+external-edit refusal regressions remain in force.
 
 No Docker engine or configured local model was available in this authoring
 environment. Chromium could not start because a required socket operation was
-prohibited. Exact-revision public CI must separately verify Docker and browser
-behaviour before merge. No live inference was substituted with a fixture.
+prohibited. The expanded existing Docker CI suite must separately prove that
+reviewed prior-instance containers are removable, current/foreign/mismatched
+containers survive refused cleanup, and cancellation leaves no owned job. The
+browser suite now opens the real recovery review UI. Exact-revision public CI
+must pass before merge. No live inference was substituted with a fixture.
 
-Whole-workspace disk quotas, activity-log retention, automatic orphan-container
-reconciliation, hostile local-user resistance and independent recovery evaluation
-remain outstanding. See [recovery boundaries](RECOVERY.md); issue #7 stays open.
+These are controlled software tests, including actual local processes, not
+independent operator use. Hard host quotas, hostile local-user resistance and
+independent recovery evaluation remain separate gates. See the precise
+[recovery boundaries](RECOVERY.md); issue #7 remains open for acceptance review.
 
 Date: 2 November 2026, Asia/Singapore. Version: 0.1.0-dev.1.
 

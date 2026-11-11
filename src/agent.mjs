@@ -129,6 +129,7 @@ export class Agent {
       throw new Fault(
         'Review the context and explicitly authorise sharing it with the configured model.',
       );
+    await this.workspaces.budget.admit(ws, this.taskStore.limits.recordBytes);
     await this.taskStore.admit(ws);
     const inspection = await this.workspaces.inspect(ws);
     if (inspection.status.trim())
@@ -196,6 +197,10 @@ export class Agent {
       throw new Fault(
         'The original files exceed the 512 KiB task recovery budget. No proposal files were written.',
       );
+    await this.workspaces.budget.admit(
+      ws,
+      proposal.files.reduce((bytes, file) => bytes + Buffer.byteLength(file.content), 0),
+    );
     task.originals = originals;
     for (const f of proposal.files) {
       const p = await safePath(ws.root, f.path);
@@ -257,6 +262,7 @@ export class Agent {
       throw new Fault('Stop the application before applying edits.', 409);
     if ((await this.workspaces.fingerprint(ws)) !== task.fingerprint)
       throw new Fault('The repository changed after this proposal. Request a new proposal.', 409);
+    await this.workspaces.budget.admit(ws, this.taskStore.limits.recordBytes);
     await this.taskStore.admit(ws, task.id);
     task.state = 'applying';
     await this.save(ws, task);

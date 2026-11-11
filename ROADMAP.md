@@ -18,10 +18,12 @@ for the remaining environment-dependent acceptance checks.
 - Verify public GitHub clone, authenticated creation and non-forced push against a
   disposable authorised test repository.
 - Require all workflow jobs to pass on the exact release commit.
-- Task-history budgets, idle preview suspension and a cooperating-server lock are
-  implemented with regression checks. Complete whole-workspace filesystem quotas,
-  orphan-container reconciliation and independent crash/recovery evaluation
-  before closing issue #7.
+- Task-history limits, a workspace application budget with recovery reserve, idle
+  preview suspension, a cooperating-server lock and explicitly reviewed owned-container
+  cleanup are implemented. Verify the exact-head Docker/browser acceptance and
+  complete independent crash/recovery evaluation for issue #7. Hard host filesystem
+  quotas remain an operator requirement; sampled application checks do not provide
+  hostile-user disk isolation.
 
 ## v0.2
 
