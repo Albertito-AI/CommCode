@@ -76,6 +76,64 @@ test('real test failure rolls back edits', async (t) => {
   assert.notEqual(result.attempts[0].code, 0);
   assert.equal(await fs.readFile(path.join(ws.root, 'expenses.mjs'), 'utf8'), before);
 });
+
+test('failed real tests remove a newly created __proto__ file through recorded rollback', async (t) => {
+  const { ws, workspaces, runner } = await fixture(t);
+  const agent = new Agent(
+    workspaces,
+    runner,
+    model([
+      [
+        { path: '__proto__', content: 'A legitimate filename from a labelled fixture' },
+        {
+          path: 'expenses.mjs',
+          content: 'export const total=()=>999; export const validExpense=()=>true;',
+        },
+      ],
+    ]),
+  );
+  const task = await agent.propose(ws, 'Special filename rollback fixture', { shareSource: true });
+  const result = await agent.apply(ws, task.id);
+  assert.equal(result.state, 'rolled_back');
+  assert.notEqual(result.attempts[0].code, 0);
+  await assert.rejects(fs.stat(path.join(ws.root, '__proto__')), { code: 'ENOENT' });
+  const saved = await agent.read(ws, task.id);
+  assert.equal(Object.hasOwn(saved.originals, '__proto__'), true);
+  assert.equal(saved.originals.__proto__, null);
+  assert.equal(Object.hasOwn(saved.applied, '__proto__'), true);
+});
+
+test('JSON-reloaded recovery preserves special filenames and still refuses later user edits', async (t) => {
+  const { ws, workspaces, runner } = await fixture(t);
+  await workspaces.write(ws, { path: '__proto__', content: 'Original special file', etag: null });
+  await workspaces.commit(ws, 'Add a legitimate special filename');
+  const agent = new Agent(
+    workspaces,
+    runner,
+    model([
+      [
+        { path: '__proto__', content: 'Task special file' },
+        { path: 'constructor', content: 'Task constructor file' },
+        { path: 'toString', content: 'Task toString file' },
+      ],
+    ]),
+  );
+  const proposed = await agent.propose(ws, 'Special filename restore fixture', {
+    shareSource: true,
+  });
+  assert.equal((await agent.apply(ws, proposed.id)).state, 'verified');
+  const reloaded = await agent.read(ws, proposed.id);
+  assert.equal(Object.hasOwn(reloaded.originals, '__proto__'), true);
+  assert.equal(reloaded.originals.__proto__, 'Original special file');
+  await fs.writeFile(path.join(ws.root, '__proto__'), 'Later user change');
+  await assert.rejects(agent.rollback(ws, reloaded), /changed outside/);
+  assert.equal(await fs.readFile(path.join(ws.root, '__proto__'), 'utf8'), 'Later user change');
+  await fs.writeFile(path.join(ws.root, '__proto__'), 'Task special file');
+  await agent.rollback(ws, await agent.read(ws, proposed.id));
+  assert.equal(await fs.readFile(path.join(ws.root, '__proto__'), 'utf8'), 'Original special file');
+  for (const name of ['constructor', 'toString'])
+    await assert.rejects(fs.stat(path.join(ws.root, name)), { code: 'ENOENT' });
+});
 test('bounded repair uses actual failing tests and a deterministic repair fixture', async (t) => {
   const { ws, workspaces, runner } = await fixture(t);
   const good = await fs.readFile(path.join(ws.root, 'expenses.mjs'), 'utf8');

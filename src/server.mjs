@@ -2,12 +2,14 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Workspaces } from './workspaces.mjs';
 import { Runner } from './runner.mjs';
 import { Provider } from './providers.mjs';
 import { Agent } from './agent.mjs';
 import { GitHub } from './github.mjs';
+import { acquireServerLease } from './server-lease.mjs';
 import {
   Fault,
   token as makeToken,
@@ -49,7 +51,32 @@ function json(res, data, status = 200) {
   res.end(JSON.stringify(data));
 }
 
-export async function createApp({
+export async function createApp(options = {}) {
+  if (!options.token || options.token.length < 32)
+    throw new Fault('Use an authentication token of at least 32 characters.');
+  const lease = await acquireServerLease(options.root);
+  try {
+    const app = await createOwnedApp(options);
+    const close = app.close;
+    let closePromise;
+    app.close = () => {
+      if (!closePromise)
+        closePromise = close()
+          .then(() => lease.release())
+          .catch((error) => {
+            closePromise = null; // A failed owned-resource cleanup can be retried safely.
+            throw error;
+          });
+      return closePromise;
+    };
+    return app;
+  } catch (error) {
+    await lease.release();
+    throw error;
+  }
+}
+
+async function createOwnedApp({
   root,
   token,
   mode = 'docker',
@@ -57,18 +84,22 @@ export async function createApp({
   github = new GitHub(),
   port = 4317,
   previewPort = 4318,
+  idleTimeoutMs = 15 * 60 * 1000,
 } = {}) {
-  if (!token || token.length < 32)
-    throw new Fault('Use an authentication token of at least 32 characters.');
   const secrets = [token, provider.key, github.token].filter(Boolean);
   const workspaces = new Workspaces(path.join(root, 'workspaces'), secrets);
   await workspaces.init();
-  const runner = new Runner({ mode, secrets }),
+  const runner = new Runner({ mode, secrets, idleTimeoutMs, budget: workspaces.budget }),
     agent = new Agent(workspaces, runner, provider),
     jobs = new Map(),
+    operations = new Set(),
+    handlers = new Set(),
     capabilities = new Map();
-  let mainOrigin, previewOrigin;
+  let mainOrigin,
+    previewOrigin,
+    closing = false;
   function startJob(ws, type, fn) {
+    if (closing) throw new Fault('Server shutdown is in progress. No new jobs are accepted.', 503);
     const key = id(),
       controller = new AbortController();
     const job = {
@@ -80,7 +111,7 @@ export async function createApp({
       controller,
     };
     jobs.set(key, job);
-    workspaces
+    const operation = workspaces
       .exclusive(ws, () => fn(controller.signal))
       .then((result) => {
         job.state = 'done';
@@ -91,6 +122,7 @@ export async function createApp({
         job.error = redact(e.message, secrets);
       })
       .finally(() => {
+        operations.delete(operation);
         job.finishedAt = new Date().toISOString();
         if (jobs.size > 100) {
           for (const [k, j] of jobs) {
@@ -101,9 +133,23 @@ export async function createApp({
           }
         }
       });
+    operations.add(operation);
     return { id: key, state: job.state };
   }
-  const preview = http.createServer(async (req, res) => {
+  function serve(handler) {
+    return http.createServer((req, res) => {
+      const operation = handler(req, res);
+      handlers.add(operation);
+      operation.then(
+        () => handlers.delete(operation),
+        () => {
+          handlers.delete(operation);
+          res.destroy();
+        },
+      );
+    });
+  }
+  const preview = serve(async (req, res) => {
     try {
       if (req.headers.host !== new URL(previewOrigin).host)
         throw new Fault('Invalid preview host.', 403);
@@ -115,6 +161,7 @@ export async function createApp({
         wsId = capabilities.get(cap),
         app = runner.apps.get(wsId);
       if (!app) throw new Fault('Preview expired or application stopped.', 404);
+      runner.touch(wsId);
       const target = 'http://127.0.0.1:' + app.port + '/' + parts.slice(2).join('/') + url.search;
       const upstream = await fetch(target, {
         signal: AbortSignal.timeout(10000),
@@ -149,7 +196,7 @@ export async function createApp({
       );
     }
   });
-  const server = http.createServer(async (req, res) => {
+  const server = serve(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader(
@@ -157,6 +204,7 @@ export async function createApp({
       `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src ${previewOrigin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,
     );
     try {
+      if (closing) throw new Fault('Server shutdown is in progress. No new work is accepted.', 503);
       if (req.headers.host !== new URL(mainOrigin).host)
         throw new Fault('Invalid host. Open the exact loopback URL printed by the server.', 403);
       if (req.headers.origin && req.headers.origin !== mainOrigin)
@@ -196,7 +244,10 @@ export async function createApp({
           (await workspaces.list()).map(({ root, ...w }) => w),
         );
       if (p === '/api/workspaces' && req.method === 'POST') {
-        const ws = await workspaces.create(await body(req));
+        const data = await body(req);
+        if (closing)
+          throw new Fault('Server shutdown is in progress. No new work is accepted.', 503);
+        const ws = await workspaces.create(data);
         const { root, ...w } = ws;
         return json(res, w, 201);
       }
@@ -230,6 +281,8 @@ export async function createApp({
         if (action === 'file')
           return json(res, await workspaces.read(ws, url.searchParams.get('path')));
         if (action === 'logs') return json(res, await runner.logs(ws.id));
+        if (action === 'resources') return json(res, await runner.resources(ws));
+        if (action === 'storage') return json(res, await workspaces.budget.usage(ws));
         if (action === 'recovery') {
           const activeApply = [...jobs.values()].some(
             (job) => job.workspace === ws.id && job.type === 'apply' && job.state === 'running',
@@ -244,19 +297,32 @@ export async function createApp({
         if (action.startsWith('tasks/')) return json(res, await agent.read(ws, action.slice(6)));
         if (action === 'export') {
           // Standard Git bundle includes committed history, portable without CommCode.
-          const target = path.join(path.dirname(ws.root), 'export.bundle');
-          await workspaces.exclusive(ws, () => git(ws.root, ['bundle', 'create', target, '--all']));
-          res.writeHead(200, {
-            'Content-Type': 'application/octet-stream',
-            'Content-Disposition': 'attachment; filename="commcode-project.bundle"',
-            'Cache-Control': 'no-store',
-          });
-          return res.end(await fs.readFile(target));
+          const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'commcode-export-'));
+          const target = path.join(directory, 'export.bundle');
+          try {
+            await workspaces.exclusive(ws, () =>
+              git(ws.root, ['bundle', 'create', target, '--all']),
+            );
+            res.writeHead(200, {
+              'Content-Type': 'application/octet-stream',
+              'Content-Disposition': 'attachment; filename="commcode-project.bundle"',
+              'Cache-Control': 'no-store',
+            });
+            return res.end(await fs.readFile(target));
+          } finally {
+            await fs.rm(directory, { recursive: true, force: true });
+          }
         }
         throw new Fault('Not found.', 404);
       }
       if (req.method !== 'POST') throw new Fault('Method not allowed.', 405);
       const data = await body(req);
+      if (closing) throw new Fault('Server shutdown is in progress. No new work is accepted.', 503);
+      if (action === 'cleanup-container') {
+        if (data.confirm !== true)
+          throw new Fault('Review the container and explicitly confirm cleanup.');
+        return json(res, await runner.cleanup(ws, data.container));
+      }
       if (action === 'stop') {
         await runner.stop(ws.id);
         for (const [cap, key] of capabilities) if (key === ws.id) capabilities.delete(cap);
@@ -362,6 +428,20 @@ export async function createApp({
     preview.close();
     throw e;
   }
+  async function sweepIdle() {
+    const stopped = await runner.suspendIdle();
+    for (const [cap, key] of capabilities)
+      if (stopped.includes(key) && !runner.apps.has(key)) capabilities.delete(cap);
+  }
+  const idleTimer = setInterval(
+    () => {
+      sweepIdle().catch(() => {
+        /* Keep the app tracked; a later sweep or explicit stop can retry. */
+      });
+    },
+    Math.min(30000, idleTimeoutMs),
+  );
+  idleTimer.unref();
   return {
     url: mainOrigin,
     previewUrl: previewOrigin,
@@ -369,13 +449,19 @@ export async function createApp({
     runner,
     agent,
     jobs,
+    sweepIdle,
     async close() {
-      for (const j of jobs.values()) j.controller.abort();
-      await runner.close();
-      await Promise.all([
+      closing = true;
+      clearInterval(idleTimer);
+      const listenersClosed = Promise.all([
         new Promise((r) => server.close(r)),
         new Promise((r) => preview.close(r)),
       ]);
+      for (const j of jobs.values()) j.controller.abort();
+      await listenersClosed;
+      await Promise.allSettled([...handlers]);
+      await Promise.allSettled([...operations]);
+      await runner.close();
     },
   };
 }

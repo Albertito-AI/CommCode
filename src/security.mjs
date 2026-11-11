@@ -111,8 +111,12 @@ export async function textFile(root, name) {
 }
 export async function atomicJSON(p, data) {
   const tmp = p + '.' + id() + '.tmp';
-  await fs.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
-  await fs.rename(tmp, p);
+  try {
+    await fs.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+    await fs.rename(tmp, p);
+  } finally {
+    await fs.rm(tmp, { force: true });
+  }
 }
 export function boundedString(value, name, max = 4000) {
   if (typeof value !== 'string' || !value.trim() || value.length > max || value.includes('\0'))

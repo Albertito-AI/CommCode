@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { git } from './process.mjs';
 import { Ledger } from './ledger.mjs';
+import { WorkspaceBudget } from './workspace-budget.mjs';
 import {
   Fault,
   id,
@@ -19,9 +20,10 @@ import {
 
 const templateRoot = fileURLToPath(new URL('../templates/', import.meta.url));
 export class Workspaces {
-  constructor(root, secrets = []) {
+  constructor(root, secrets = [], { budget = new WorkspaceBudget() } = {}) {
     this.root = root;
     this.secrets = secrets;
+    this.budget = budget;
     this.locks = new Set();
   }
   async init() {
@@ -70,9 +72,14 @@ export class Workspaces {
     await fs.mkdir(base, { recursive: true, mode: 0o700 });
     try {
       if (url) {
-        await git(base, ['clone', '--no-recurse-submodules', '--', url, 'repo'], {
-          timeout: 120000,
+        const imported = await this.budget.execute({ root }, async (signal) => {
+          await git(base, ['clone', '--no-recurse-submodules', '--', url, 'repo'], {
+            timeout: 120000,
+            signal,
+          });
+          return { code: 0, output: '' };
         });
+        if (imported.budgetExceeded) throw new Fault(imported.output, 409);
       } else {
         await fs.cp(path.join(templateRoot, template), root, { recursive: true });
         await git(root, ['init', '-b', 'main']);
@@ -93,6 +100,7 @@ export class Workspaces {
         ws.test = '';
         ws.start = '';
       }
+      await this.budget.admit({ root });
       await atomicJSON(path.join(base, 'workspace.json'), ws);
       ws.root = root;
       await this.ledger(ws).append('workspace.created', {
@@ -107,6 +115,7 @@ export class Workspaces {
     }
   }
   async configure(ws, config) {
+    await this.budget.admit(ws, 8192);
     for (const key of ['test', 'start', 'install'])
       if (key in config) {
         if (
@@ -179,6 +188,10 @@ export class Workspaces {
     });
     if ((current === null ? null : hash(current)) !== etag)
       throw new Fault('The file changed since it was opened. Reload it before saving.', 409);
+    await this.budget.admit(
+      ws,
+      Math.max(0, Buffer.byteLength(content) - Buffer.byteLength(current || '')) + 8192,
+    );
     await fs.mkdir(path.dirname(p), { recursive: true });
     await fs.writeFile(p, content);
     await this.ledger(ws).append('file.saved', {
@@ -189,6 +202,7 @@ export class Workspaces {
     return { etag: hash(content) };
   }
   async commit(ws, message) {
+    await this.budget.admit(ws, 1024 * 1024);
     boundedString(message, 'Commit message', 200);
     // Scan the bytes that will be staged, honour ignore rules, and include deletions.
     const names = (
@@ -211,6 +225,7 @@ export class Workspaces {
     }
     await git(ws.root, ['add', '-A', '--', '.']);
     await git(ws.root, ['commit', '-m', message]);
+    await this.budget.admit(ws);
     const sha = (await git(ws.root, ['rev-parse', 'HEAD'])).trim();
     await this.ledger(ws).append('git.committed', { sha, message });
     return { sha };

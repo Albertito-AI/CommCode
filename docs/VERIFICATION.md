@@ -1,5 +1,73 @@
 # Verification record
 
+## 11 November 2026: bounded recovery continuation
+
+The task-history store now checks 200-record, 8 MiB per-record and 64 MiB
+aggregate limits and reserves recovery headroom before provider calls or source
+edits. It preserves existing records on rejection. Original-file recovery data
+is checked before writes, and long stored output/diff excerpts carry truncation
+flags. The recovery reader now accepts the writer's record size, fixing the
+earlier 256 KiB inspection mismatch. A cooperating-server filesystem lock and
+idle preview suspension have been added; container names are scoped to a runner
+instance rather than only a workspace.
+
+The 512 MiB workspace application budget includes source, Git, dependencies and
+metadata, with a 16 MiB reserve. It refuses ordinary writes at the threshold,
+checks command/import execution before and after running and samples continuing
+commands. Prior-instance container cleanup rechecks exact IDs, canonical-directory
+ownership labels and bind sources, and refuses current or mismatched resources.
+The recovery UI exposes storage and container review separately from task rollback.
+
+On Node 24.22.1, `npm run verify` passed syntax checks, all 53 unit/API/integration
+tests with no skips, and the editor build. `npm run format:check` passed. The 20
+added tests include original-data preflight, record preservation, exclusive
+startup, a killed lease-holder process, idle shutdown, real command overshoot and
+termination, cancellation with guarded restore, reserved-space rollback and a
+real HTTP preview restart/capability race. A reproduced shutdown regression
+checks that a delayed job finishes persistence before lease release, a request
+whose body arrives during shutdown receives 503, and concurrent close calls share
+one completion promise. A second reproduced case verifies persistence completes
+even after the initiating HTTP client disconnects; actual handler promises are
+drained, not only connections. A labelled daemon adapter exercises
+failed-removal tracking, confirmed absence and failed job/startup cleanup; it is
+not a real Docker test. Two reproduced regressions also verify that legitimate
+`__proto__` filenames are recorded and restored through JSON-reloaded task maps
+without overwriting later user edits.
+The API suite also checks authenticated recovery access and successful export
+when normal writes have reached their budget. Existing partial-write and later
+external-edit refusal regressions remain in force.
+
+No Docker engine or configured local model was available in this authoring
+environment. Chromium could not start because a required socket operation was
+prohibited. The expanded existing Docker CI suite must separately prove that
+reviewed prior-instance containers are removable, current/foreign/mismatched
+containers survive refused cleanup, and cancellation leaves no owned job. The
+browser suite now opens the real recovery review UI. Exact-revision public CI
+must pass before merge. No live inference was substituted with a fixture.
+
+These are controlled software tests, including actual local processes, not
+independent operator use. Hard host quotas, hostile local-user resistance and
+independent recovery evaluation remain separate gates. See the precise
+[recovery boundaries](RECOVERY.md) and the bounded engineering acceptance in
+[issue #7](https://github.com/Albertito-AI/CommCode/issues/7). Independent operator
+use and hard kernel quotas are separate from that implemented scope.
+
+### Observed public CI for the complete implementation
+
+[Run 42973285246](https://github.com/Albertito-AI/CommCode/actions/runs/42973285246)
+passed at pull-request head `49df869b87e714b891046a7d1487f352393310f6`.
+The run executed both real Docker integration tests, including ownership refusal,
+prior-instance removal and cancellation cleanup, and the real Chromium flow with
+recovery review, editing and desktop/mobile preview interaction. Installation,
+formatting, the 48 tests present at that head, build, advisory audit and demo also
+passed. The browser artifact was downloaded and its SHA-256 matched
+`f6b3f8c2207982e8c5697166a6c5c438f187206aea4e630b301e482cdf43b71d`;
+desktop and mobile screenshots were visually inspected. A subsequent review
+added five regressions, made job/startup cleanup failures visible, corrected
+special-filename recovery maps and held the shutdown lease until job persistence; that final source must receive its own exact-head
+CI before merge. The observed run does not establish live-model or independent-user
+acceptance.
+
 Date: 2 November 2026, Asia/Singapore. Version: 0.1.0-dev.1.
 
 ## Initial authoring-environment results

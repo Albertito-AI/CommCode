@@ -23,6 +23,14 @@ test('desktop and mobile: login, create, editor, tests, live preview and expense
     await page.locator('#create-form button').click();
     await expect(page.locator('#filename')).toHaveText('index.html');
     await expect(page.locator('.cm-editor')).toBeVisible();
+    await page.locator('#recovery').click();
+    await expect(page.locator('#viewer-title')).toHaveText('Recovery review');
+    await expect(page.locator('#viewer-content')).toContainText('ordinaryLimitBytes');
+    await expect(page.locator('#viewer-content')).toContainText(
+      'Container recovery applies to Docker mode.',
+    );
+    await expect(page.locator('#viewer-actions button')).toHaveCount(0);
+    await page.locator('#close-viewer').click();
     await page.locator('.cm-content').press('ControlOrMeta+End');
     await page.keyboard.insertText('\n<!-- Browser verification -->\n');
     await page.locator('#save').click();

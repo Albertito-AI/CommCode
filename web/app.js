@@ -16,6 +16,7 @@ function notice(message) {
   noticeTimer = setTimeout(() => ($('notice').hidden = true), 9000);
 }
 function show(title, value) {
+  $('viewer-actions').replaceChildren();
   $('viewer-title').textContent = title;
   $('viewer-content').textContent =
     typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -304,13 +305,45 @@ action('ledger', async () => {
   const r = await api(base() + 'ledger');
   show('Activity ledger · chain ' + (r.valid ? 'valid' : 'INVALID'), r.events);
 });
-action('recovery', async () => {
-  const r = await api(base() + 'recovery');
-  show('Recovery review · read-only', r);
-  if (r.truncated) notice('Recovery inventory truncated: inspect the workspace state separately.');
-  else if (r.tasks.length) notice('Interrupted or unreadable task records need human review.');
-  else notice('No interrupted task records were found in this bounded scan.');
-});
+async function reviewRecovery() {
+  const route = base();
+  const [tasks, storage, containers] = await Promise.all([
+    api(route + 'recovery'),
+    api(route + 'storage').catch((error) => ({ error: error.message })),
+    api(route + 'resources').catch((error) => ({ available: false, error: error.message })),
+  ]);
+  show('Recovery review', { tasks, storage, containers });
+  for (const resource of containers.resources || []) {
+    if (!resource.cleanupAllowed) continue;
+    const button = document.createElement('button');
+    button.className = 'secondary';
+    button.textContent = 'Clean reviewed container ' + resource.id.slice(0, 12);
+    button.addEventListener('click', async () => {
+      if (
+        !confirm(
+          'Stop and remove this prior-instance container?\n' +
+            resource.id +
+            '\nReview its running state above first. Workspace files will be retained.',
+        )
+      )
+        return;
+      button.disabled = true;
+      try {
+        await api(route + 'cleanup-container', { container: resource.id, confirm: true });
+        notice('Reviewed container removed. Workspace files retained.');
+        await reviewRecovery();
+      } catch (error) {
+        button.disabled = false;
+        notice(error.message);
+      }
+    });
+    $('viewer-actions').append(button);
+  }
+  if (tasks.truncated)
+    notice('Recovery inventory truncated: inspect the workspace state separately.');
+  else if (tasks.tasks.length) notice('Interrupted or unreadable task records need human review.');
+}
+action('recovery', reviewRecovery);
 action('context', async () => {
   const r = await api(base() + 'context');
   show('Exact source context eligible for the next model request', r);
