@@ -1,5 +1,33 @@
 # Verification record
 
+## 11 November 2026: bounded recovery continuation
+
+The task-history store now checks 200-record, 8 MiB per-record and 64 MiB
+aggregate limits and reserves recovery headroom before provider calls or source
+edits. It preserves existing records on rejection. Original-file recovery data
+is checked before writes, and long stored output/diff excerpts carry truncation
+flags. The recovery reader now accepts the writer's record size, fixing the
+earlier 256 KiB inspection mismatch. A cooperating-server filesystem lock and
+idle preview suspension have been added; container names are scoped to a runner
+instance rather than only a workspace.
+
+On Node 24.22.1, `npm run verify` passed syntax checks, all 41 unit/API/integration
+tests with no skips, and the editor build. `npm run format:check` passed. Eight new
+tests cover full history before model calls, preservation of records, recovery
+headroom, linked records, oversized originals before source writes, recovery
+above the old scan limit, exclusive server startup, a killed lease-holder process,
+idle preview stopping and failed temporary-file cleanup. These are controlled
+software tests, including actual local processes, not independent operator use.
+
+No Docker engine or configured local model was available in this authoring
+environment. Chromium could not start because a required socket operation was
+prohibited. Exact-revision public CI must separately verify Docker and browser
+behaviour before merge. No live inference was substituted with a fixture.
+
+Whole-workspace disk quotas, activity-log retention, automatic orphan-container
+reconciliation, hostile local-user resistance and independent recovery evaluation
+remain outstanding. See [recovery boundaries](RECOVERY.md); issue #7 stays open.
+
 Date: 2 November 2026, Asia/Singapore. Version: 0.1.0-dev.1.
 
 ## Initial authoring-environment results

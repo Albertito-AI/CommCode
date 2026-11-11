@@ -5,11 +5,20 @@ import { Fault, id, redact } from './security.mjs';
 import { dockerPreview } from './docker-preview.mjs';
 
 export class Runner {
-  constructor({ mode = 'docker', image = 'commcode-runtime:dev', secrets = [] } = {}) {
+  constructor({
+    mode = 'docker',
+    image = 'commcode-runtime:dev',
+    secrets = [],
+    idleTimeoutMs = 15 * 60 * 1000,
+  } = {}) {
     this.mode = mode;
     this.image = image;
     this.secrets = secrets;
     this.apps = new Map();
+    if (!Number.isSafeInteger(idleTimeoutMs) || idleTimeoutMs < 1000)
+      throw new Fault('Preview idle timeout must be at least 1000 milliseconds.');
+    this.idleTimeoutMs = idleTimeoutMs;
+    this.instance = id();
   }
   async status() {
     if (this.mode === 'process')
@@ -74,7 +83,7 @@ export class Runner {
         secrets: this.secrets,
         env: { HOME: '/tmp', PYTHONDONTWRITEBYTECODE: '1' },
       });
-    const name = 'pw-job-' + id();
+    const name = 'pw-job-' + this.instance + '-' + id();
     try {
       return await run(
         'docker',
@@ -112,7 +121,7 @@ export class Runner {
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-      const app = { port, child, log: '', running: true };
+      const app = { port, child, log: '', running: true, lastUsedAt: Date.now() };
       const collect = (d) => {
         app.log = redact((app.log + d.toString()).slice(-65536), this.secrets);
       };
@@ -127,8 +136,7 @@ export class Runner {
       });
       this.apps.set(ws.id, app);
     } else {
-      const name = 'pw-app-' + ws.id;
-      await run('docker', ['rm', '-f', name], { timeout: 10000 });
+      const name = 'pw-app-' + this.instance + '-' + id();
       const result = await run('docker', [
         'run',
         '-d',
@@ -150,7 +158,7 @@ export class Runner {
       }
       try {
         const { relay, port } = await dockerPreview(name);
-        this.apps.set(ws.id, { name, relay, port, running: true });
+        this.apps.set(ws.id, { name, relay, port, running: true, lastUsedAt: Date.now() });
       } catch (e) {
         await run('docker', ['rm', '-f', name]);
         throw e;
@@ -188,9 +196,23 @@ export class Runner {
     });
     return { running: st.output.trim() === 'true', output: r.output };
   }
-  async stop(wsId) {
+  touch(wsId) {
     const app = this.apps.get(wsId);
-    if (!app) return;
+    if (app) app.lastUsedAt = Date.now();
+  }
+  async suspendIdle(now = Date.now()) {
+    const stopped = [];
+    for (const [key, app] of this.apps) {
+      if (now - app.lastUsedAt >= this.idleTimeoutMs) {
+        await this.stop(key, app);
+        if (!this.apps.has(key)) stopped.push(key);
+      }
+    }
+    return stopped;
+  }
+  async stop(wsId, expected) {
+    const app = this.apps.get(wsId);
+    if (!app || (expected && app !== expected)) return;
     if (app.child) {
       try {
         process.kill(-app.child.pid, 'SIGKILL');
@@ -199,7 +221,7 @@ export class Runner {
       await run('docker', ['rm', '-f', app.name]);
       if (app.relay) await new Promise((resolve) => app.relay.close(resolve));
     }
-    this.apps.delete(wsId);
+    if (this.apps.get(wsId) === app) this.apps.delete(wsId);
   }
   async close() {
     for (const key of [...this.apps.keys()]) await this.stop(key);

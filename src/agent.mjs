@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { id, atomicJSON, safePath, hash, Fault, boundedString } from './security.mjs';
+import { id, safePath, hash, Fault, boundedString } from './security.mjs';
+import { TaskStore } from './task-store.mjs';
 import { git } from './process.mjs';
 import { validateProposal } from './providers.mjs';
 
@@ -31,25 +32,20 @@ function matchesRollbackTargets(applied, originals) {
 }
 
 export class Agent {
-  constructor(workspaces, runner, provider) {
+  constructor(workspaces, runner, provider, { taskStore = new TaskStore() } = {}) {
     this.workspaces = workspaces;
     this.runner = runner;
     this.provider = provider;
+    this.taskStore = taskStore;
   }
   taskPath(ws, key) {
-    if (!/^[0-9a-f-]{36}$/.test(key)) throw new Fault('Unknown task.', 404);
-    return path.join(path.dirname(ws.root), 'task-' + key + '.json');
+    return this.taskStore.file(ws, key);
   }
   async read(ws, key) {
-    try {
-      return JSON.parse(await fs.readFile(this.taskPath(ws, key), 'utf8'));
-    } catch (e) {
-      if (e.code === 'ENOENT') throw new Fault('Unknown task.', 404);
-      throw e;
-    }
+    return this.taskStore.read(ws, key);
   }
   async save(ws, task) {
-    await atomicJSON(this.taskPath(ws, task.id), task);
+    await this.taskStore.save(ws, task);
   }
   // Read-only startup/restart reconciliation. Never restore bytes automatically.
   async recovery(ws, { activeApply = false } = {}) {
@@ -66,7 +62,7 @@ export class Agent {
       try {
         const p = path.join(base, entry.name);
         const st = await fs.lstat(p);
-        if (!st.isFile() || st.nlink !== 1 || st.size > 256 * 1024)
+        if (!st.isFile() || st.nlink !== 1 || st.size > this.taskStore.limits.recordBytes)
           throw new Error('Invalid task record');
         record = JSON.parse(await fs.readFile(p, 'utf8'));
         if (record.id !== key || typeof record.state !== 'string')
@@ -133,6 +129,7 @@ export class Agent {
       throw new Fault(
         'Review the context and explicitly authorise sharing it with the configured model.',
       );
+    await this.taskStore.admit(ws);
     const inspection = await this.workspaces.inspect(ws);
     if (inspection.status.trim())
       throw new Fault('Commit or export your existing changes before starting an AI task.', 409);
@@ -171,13 +168,37 @@ export class Agent {
     // Validate the entire edit set before touching disk.
     validateProposal(proposal);
     for (const f of proposal.files) await safePath(ws.root, f.path);
+    const originals = { ...task.originals };
     for (const f of proposal.files) {
       const p = await safePath(ws.root, f.path);
-      if (!(f.path in task.originals))
-        task.originals[f.path] = await fs.readFile(p, 'utf8').catch((e) => {
+      if (!Object.hasOwn(originals, f.path)) {
+        const stat = await fs.lstat(p).catch((e) => {
           if (e.code === 'ENOENT') return null;
           throw e;
         });
+        if (stat && (!stat.isFile() || stat.size > 256 * 1024))
+          throw new Fault(
+            'AI recovery supports original source files up to 256 KiB. No proposal files were written.',
+          );
+        originals[f.path] = await fs.readFile(p, 'utf8').catch((e) => {
+          if (e.code === 'ENOENT') return null;
+          throw e;
+        });
+      }
+    }
+    if (
+      Object.values(originals).reduce(
+        (bytes, content) => bytes + Buffer.byteLength(content || ''),
+        0,
+      ) >
+      512 * 1024
+    )
+      throw new Fault(
+        'The original files exceed the 512 KiB task recovery budget. No proposal files were written.',
+      );
+    task.originals = originals;
+    for (const f of proposal.files) {
+      const p = await safePath(ws.root, f.path);
       // Persist recovery state before each write. Recovery refuses mismatched bytes.
       task.applied[f.path] = hash(f.content);
       await this.save(ws, task);
@@ -236,6 +257,7 @@ export class Agent {
       throw new Fault('Stop the application before applying edits.', 409);
     if ((await this.workspaces.fingerprint(ws)) !== task.fingerprint)
       throw new Fault('The repository changed after this proposal. Request a new proposal.', 409);
+    await this.taskStore.admit(ws, task.id);
     task.state = 'applying';
     await this.save(ws, task);
     let proposal = task.proposal;
@@ -250,6 +272,8 @@ export class Agent {
           files: proposal.files.map((f) => f.path),
           command: ws.test,
           ...result,
+          output: result.output.slice(0, 64000),
+          outputStoredTruncated: result.output.length > 64000,
         });
         await this.save(ws, task);
         await this.workspaces
@@ -258,7 +282,7 @@ export class Agent {
         if (result.code === 0 && !result.cancelled && !result.timedOut && !result.truncated) {
           // A test suite can itself write files; such writes remain visible in the diff.
           task.state = 'verified';
-          task.diff = await git(ws.root, [
+          const diff = await git(ws.root, [
             'diff',
             '--no-ext-diff',
             '--no-textconv',
@@ -266,6 +290,8 @@ export class Agent {
             '--',
             '.',
           ]);
+          task.diff = diff.slice(0, 64000);
+          task.diffStoredTruncated = diff.length > 64000;
           task.verification = {
             tests: 'PASS',
             build: 'NOT_RUN',

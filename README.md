@@ -33,7 +33,10 @@ for the measured scope and remaining stable-release gates.
 
 A [read-only recovery review](docs/RECOVERY.md) inventories interrupted AI
 records and compares recorded file digests and Git HEAD before a human chooses
-any guarded rollback. It does not yet impose disk quotas or idle suspension.
+any guarded rollback. Task history now has count and byte limits, a server lock
+prevents two cooperating servers from sharing a data directory, and idle previews
+stop after 15 minutes without preview requests. Whole-workspace filesystem quotas
+remain a separate host requirement; see the [storage boundaries](docs/RECOVERY.md).
 
 ## Runtime and remaining acceptance work
 

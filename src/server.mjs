@@ -8,6 +8,7 @@ import { Runner } from './runner.mjs';
 import { Provider } from './providers.mjs';
 import { Agent } from './agent.mjs';
 import { GitHub } from './github.mjs';
+import { acquireServerLease } from './server-lease.mjs';
 import {
   Fault,
   token as makeToken,
@@ -49,7 +50,25 @@ function json(res, data, status = 200) {
   res.end(JSON.stringify(data));
 }
 
-export async function createApp({
+export async function createApp(options = {}) {
+  if (!options.token || options.token.length < 32)
+    throw new Fault('Use an authentication token of at least 32 characters.');
+  const lease = await acquireServerLease(options.root);
+  try {
+    const app = await createOwnedApp(options);
+    const close = app.close;
+    app.close = async () => {
+      await close();
+      await lease.release();
+    };
+    return app;
+  } catch (error) {
+    await lease.release();
+    throw error;
+  }
+}
+
+async function createOwnedApp({
   root,
   token,
   mode = 'docker',
@@ -57,13 +76,12 @@ export async function createApp({
   github = new GitHub(),
   port = 4317,
   previewPort = 4318,
+  idleTimeoutMs = 15 * 60 * 1000,
 } = {}) {
-  if (!token || token.length < 32)
-    throw new Fault('Use an authentication token of at least 32 characters.');
   const secrets = [token, provider.key, github.token].filter(Boolean);
   const workspaces = new Workspaces(path.join(root, 'workspaces'), secrets);
   await workspaces.init();
-  const runner = new Runner({ mode, secrets }),
+  const runner = new Runner({ mode, secrets, idleTimeoutMs }),
     agent = new Agent(workspaces, runner, provider),
     jobs = new Map(),
     capabilities = new Map();
@@ -115,6 +133,7 @@ export async function createApp({
         wsId = capabilities.get(cap),
         app = runner.apps.get(wsId);
       if (!app) throw new Fault('Preview expired or application stopped.', 404);
+      runner.touch(wsId);
       const target = 'http://127.0.0.1:' + app.port + '/' + parts.slice(2).join('/') + url.search;
       const upstream = await fetch(target, {
         signal: AbortSignal.timeout(10000),
@@ -362,6 +381,21 @@ export async function createApp({
     preview.close();
     throw e;
   }
+  const idleTimer = setInterval(
+    () => {
+      runner
+        .suspendIdle()
+        .then((stopped) => {
+          for (const [cap, key] of capabilities)
+            if (stopped.includes(key)) capabilities.delete(cap);
+        })
+        .catch(() => {
+          /* Keep the app tracked; a later sweep or explicit stop can retry. */
+        });
+    },
+    Math.min(30000, idleTimeoutMs),
+  );
+  idleTimer.unref();
   return {
     url: mainOrigin,
     previewUrl: previewOrigin,
@@ -370,6 +404,7 @@ export async function createApp({
     agent,
     jobs,
     async close() {
+      clearInterval(idleTimer);
       for (const j of jobs.values()) j.controller.abort();
       await runner.close();
       await Promise.all([
