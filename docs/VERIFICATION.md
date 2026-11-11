@@ -18,12 +18,15 @@ commands. Prior-instance container cleanup rechecks exact IDs, canonical-directo
 ownership labels and bind sources, and refuses current or mismatched resources.
 The recovery UI exposes storage and container review separately from task rollback.
 
-On Node 24.22.1, `npm run verify` passed syntax checks, all 51 unit/API/integration
-tests with no skips, and the editor build. `npm run format:check` passed. The 18
+On Node 24.22.1, `npm run verify` passed syntax checks, all 52 unit/API/integration
+tests with no skips, and the editor build. `npm run format:check` passed. The 19
 added tests include original-data preflight, record preservation, exclusive
 startup, a killed lease-holder process, idle shutdown, real command overshoot and
 termination, cancellation with guarded restore, reserved-space rollback and a
-real HTTP preview restart/capability race. A labelled daemon adapter exercises
+real HTTP preview restart/capability race. A reproduced shutdown regression
+checks that a delayed job finishes persistence before lease release, a request
+whose body arrives during shutdown receives 503, and concurrent close calls share
+one completion promise. A labelled daemon adapter exercises
 failed-removal tracking, confirmed absence and failed job/startup cleanup; it is
 not a real Docker test. Two reproduced regressions also verify that legitimate
 `__proto__` filenames are recorded and restored through JSON-reloaded task maps
@@ -52,12 +55,12 @@ passed at pull-request head `49df869b87e714b891046a7d1487f352393310f6`.
 The run executed both real Docker integration tests, including ownership refusal,
 prior-instance removal and cancellation cleanup, and the real Chromium flow with
 recovery review, editing and desktop/mobile preview interaction. Installation,
-formatting, the then-48 local-style tests, build, advisory audit and demo also
+formatting, the 48 tests present at that head, build, advisory audit and demo also
 passed. The browser artifact was downloaded and its SHA-256 matched
 `f6b3f8c2207982e8c5697166a6c5c438f187206aea4e630b301e482cdf43b71d`;
 desktop and mobile screenshots were visually inspected. A subsequent review
-added three regressions, made job/startup cleanup failures visible and corrected
-special-filename recovery maps; that final source must receive its own exact-head
+added four regressions, made job/startup cleanup failures visible, corrected
+special-filename recovery maps and held the shutdown lease until job persistence; that final source must receive its own exact-head
 CI before merge. The observed run does not establish live-model or independent-user
 acceptance.
 

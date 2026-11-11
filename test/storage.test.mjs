@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { TaskStore } from '../src/task-store.mjs';
@@ -154,6 +155,129 @@ test('a killed server lease remains visible and cannot be silently reclaimed', a
   await assert.rejects(acquireServerLease(root), /existing server lock/);
   const record = JSON.parse(await fs.readFile(path.join(root, '.server.lock'), 'utf8'));
   assert.equal(record.pid, child.pid);
+});
+
+test('shutdown retains the server lease until an in-flight job finishes its persistence', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'commcode-close-lease-'));
+  const key = token();
+  let release, entered, second, lateRequest;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const provider = {
+    info: () => ({ kind: 'delayed shutdown fixture, not a live model' }),
+    propose: async () => {
+      entered();
+      await gate;
+      return {
+        plan: ['Shutdown fixture'],
+        explanation: 'Controlled persistence after cancellation.',
+        files: [{ path: 'README.md', content: 'Fixture proposal' }],
+      };
+    },
+  };
+  const app = await createApp({
+    root,
+    token: key,
+    provider,
+    mode: 'process',
+    port: 0,
+    previewPort: 0,
+  });
+  const call = async (route, data) => {
+    const response = await fetch(app.url + '/api/' + route, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    assert.equal(response.ok, true);
+    return response.json();
+  };
+  let closing;
+  try {
+    const workspace = await call('workspaces', { name: 'Shutdown persistence' });
+    await call('workspaces/' + workspace.id + '/propose', {
+      objective: 'Labelled delayed proposal',
+      shareSource: true,
+    });
+    await started;
+    let enteredLate;
+    const lateEntered = new Promise((resolve) => {
+      enteredLate = resolve;
+    });
+    const originalGet = app.workspaces.get.bind(app.workspaces);
+    app.workspaces.get = async (key) => {
+      const workspace = await originalGet(key);
+      enteredLate();
+      return workspace;
+    };
+    const lateBody = JSON.stringify({ objective: 'Late request fixture', shareSource: true });
+    const lateResponse = new Promise((resolve, reject) => {
+      lateRequest = http.request(
+        app.url + '/api/workspaces/' + workspace.id + '/propose',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + key,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(lateBody),
+          },
+        },
+        (response) => {
+          response.resume();
+          response.on('end', () => resolve(response.statusCode));
+        },
+      );
+      lateRequest.on('error', reject);
+      lateRequest.write(lateBody.slice(0, 1));
+    });
+    await lateEntered;
+    closing = app.close();
+    const concurrentClose = app.close();
+    lateRequest.end(lateBody.slice(1));
+    assert.equal(
+      await lateResponse,
+      503,
+      'A request body completed during shutdown must not start a new job',
+    );
+    assert.equal(app.jobs.size, 1);
+    assert.equal(
+      concurrentClose,
+      closing,
+      'Concurrent close callers share one lease-release operation',
+    );
+    const finishedEarly = await Promise.race([
+      closing.then(() => true),
+      new Promise((resolve) => setTimeout(() => resolve(false), 75)),
+    ]);
+    assert.equal(finishedEarly, false, 'Shutdown must wait for final job persistence');
+    await assert.rejects(async () => {
+      second = await createApp({ root, token: key, mode: 'process', port: 0, previewPort: 0 });
+    }, /existing server lock/);
+    release();
+    await closing;
+    assert.equal(app.workspaces.locks.size, 0);
+    const restarted = await createApp({
+      root,
+      token: key,
+      mode: 'process',
+      port: 0,
+      previewPort: 0,
+    });
+    await restarted.close();
+  } finally {
+    lateRequest?.destroy();
+    release();
+    for (let attempt = 0; app.workspaces.locks.size && attempt < 100; attempt++)
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    if (closing) await closing;
+    else await app.close();
+    await second?.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test('preview activity delays idle suspension; an idle application is stopped without deleting sources', async (t) => {

@@ -79,8 +79,12 @@ guarantee against external disk exhaustion.
 
 Startup acquires `.server.lock` with exclusive filesystem creation and records
 the process, host and instance identity. A second server refuses to start, even
-if it chooses other HTTP ports. Clean shutdown removes only its own lock. A killed
-process leaves a visible lock and startup refuses to guess whether it is stale.
+if it chooses other HTTP ports. Clean shutdown rejects new work, drains active
+HTTP handlers and waits for in-flight jobs to finish their terminal persistence
+before removing its own lock. Concurrent close callers share the same completion
+promise. A cleanup failure retains the lease for retry; shutdown never forces an
+unsafe release. A killed process leaves a visible lock and startup refuses to
+guess whether it is stale.
 Stop all users of the directory, inspect the recorded host/process and any orphan
 runtime processes, then remove a stale lock manually only after confirming that
 none can still write. Process-number reuse and untrusted local users prevent this

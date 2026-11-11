@@ -58,9 +58,16 @@ export async function createApp(options = {}) {
   try {
     const app = await createOwnedApp(options);
     const close = app.close;
-    app.close = async () => {
-      await close();
-      await lease.release();
+    let closePromise;
+    app.close = () => {
+      if (!closePromise)
+        closePromise = close()
+          .then(() => lease.release())
+          .catch((error) => {
+            closePromise = null; // A failed owned-resource cleanup can be retried safely.
+            throw error;
+          });
+      return closePromise;
     };
     return app;
   } catch (error) {
@@ -85,9 +92,13 @@ async function createOwnedApp({
   const runner = new Runner({ mode, secrets, idleTimeoutMs, budget: workspaces.budget }),
     agent = new Agent(workspaces, runner, provider),
     jobs = new Map(),
+    operations = new Set(),
     capabilities = new Map();
-  let mainOrigin, previewOrigin;
+  let mainOrigin,
+    previewOrigin,
+    closing = false;
   function startJob(ws, type, fn) {
+    if (closing) throw new Fault('Server shutdown is in progress. No new jobs are accepted.', 503);
     const key = id(),
       controller = new AbortController();
     const job = {
@@ -99,7 +110,7 @@ async function createOwnedApp({
       controller,
     };
     jobs.set(key, job);
-    workspaces
+    const operation = workspaces
       .exclusive(ws, () => fn(controller.signal))
       .then((result) => {
         job.state = 'done';
@@ -110,6 +121,7 @@ async function createOwnedApp({
         job.error = redact(e.message, secrets);
       })
       .finally(() => {
+        operations.delete(operation);
         job.finishedAt = new Date().toISOString();
         if (jobs.size > 100) {
           for (const [k, j] of jobs) {
@@ -120,6 +132,7 @@ async function createOwnedApp({
           }
         }
       });
+    operations.add(operation);
     return { id: key, state: job.state };
   }
   const preview = http.createServer(async (req, res) => {
@@ -177,6 +190,7 @@ async function createOwnedApp({
       `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src ${previewOrigin}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`,
     );
     try {
+      if (closing) throw new Fault('Server shutdown is in progress. No new work is accepted.', 503);
       if (req.headers.host !== new URL(mainOrigin).host)
         throw new Fault('Invalid host. Open the exact loopback URL printed by the server.', 403);
       if (req.headers.origin && req.headers.origin !== mainOrigin)
@@ -216,7 +230,10 @@ async function createOwnedApp({
           (await workspaces.list()).map(({ root, ...w }) => w),
         );
       if (p === '/api/workspaces' && req.method === 'POST') {
-        const ws = await workspaces.create(await body(req));
+        const data = await body(req);
+        if (closing)
+          throw new Fault('Server shutdown is in progress. No new work is accepted.', 503);
+        const ws = await workspaces.create(data);
         const { root, ...w } = ws;
         return json(res, w, 201);
       }
@@ -286,6 +303,7 @@ async function createOwnedApp({
       }
       if (req.method !== 'POST') throw new Fault('Method not allowed.', 405);
       const data = await body(req);
+      if (closing) throw new Fault('Server shutdown is in progress. No new work is accepted.', 503);
       if (action === 'cleanup-container') {
         if (data.confirm !== true)
           throw new Fault('Review the container and explicitly confirm cleanup.');
@@ -419,13 +437,16 @@ async function createOwnedApp({
     jobs,
     sweepIdle,
     async close() {
+      closing = true;
       clearInterval(idleTimer);
-      for (const j of jobs.values()) j.controller.abort();
-      await runner.close();
-      await Promise.all([
+      const listenersClosed = Promise.all([
         new Promise((r) => server.close(r)),
         new Promise((r) => preview.close(r)),
       ]);
+      for (const j of jobs.values()) j.controller.abort();
+      await listenersClosed;
+      await Promise.allSettled([...operations]);
+      await runner.close();
     },
   };
 }
