@@ -140,7 +140,7 @@ export class Runner {
         { timeout, signal, secrets: this.secrets },
       );
     } finally {
-      await this.docker('docker', ['rm', '-f', name], { timeout: 10000 }).catch(() => {});
+      await removeContainer(name, this.docker);
     }
   }
   async start(ws) {
@@ -194,7 +194,7 @@ export class Runner {
         ws.start,
       ]);
       if (result.code !== 0) {
-        await this.docker('docker', ['rm', '-f', name]);
+        await removeContainer(name, this.docker);
         throw new Fault('Application startup failed: ' + result.output, 503);
       }
       try {
@@ -212,7 +212,7 @@ export class Runner {
           workspace: ws,
         });
       } catch (e) {
-        await this.docker('docker', ['rm', '-f', name]);
+        await removeContainer(name, this.docker);
         throw e;
       }
     }

@@ -274,6 +274,28 @@ test('Docker removal failures remain tracked until absence is confirmed by the d
   assert.equal(runner.apps.has(ws.id), false);
 });
 
+test('failed job and startup cleanup are surfaced by the labelled daemon fixture', async (t) => {
+  const { ws } = await fixture(t);
+  for (const starting of [false, true]) {
+    const calls = [];
+    const runner = new Runner({
+      docker: async (_bin, args) => {
+        calls.push(args[0]);
+        if (args[0] === 'run')
+          return { code: starting ? 1 : 0, output: 'Labelled execution fixture' };
+        if (args[0] === 'rm') return { code: 1, output: 'Labelled daemon fixture: removal denied' };
+        if (args[0] === 'ps') return { code: 0, output: 'a'.repeat(64) + '\n' };
+        throw new Error('Unexpected fixture command');
+      },
+    });
+    await assert.rejects(
+      starting ? runner.start(ws) : runner.execute(ws, 'fixture'),
+      /Could not remove the owned container/,
+    );
+    assert.deepEqual(calls, ['run', 'rm', 'ps']);
+  }
+});
+
 test('an old idle sweep cannot revoke the capability of a restarted real preview', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'commcode-capability-'));
   const key = token();

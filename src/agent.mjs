@@ -152,8 +152,8 @@ export class Agent {
       proposal,
       attempts: [],
       usage: [proposal.usage],
-      originals: {},
-      applied: {},
+      originals: Object.create(null),
+      applied: Object.create(null),
       createdAt: new Date().toISOString(),
     };
     await this.save(ws, task);
@@ -169,7 +169,10 @@ export class Agent {
     // Validate the entire edit set before touching disk.
     validateProposal(proposal);
     for (const f of proposal.files) await safePath(ws.root, f.path);
-    const originals = { ...task.originals };
+    // JSON reload restores Object.prototype; recreate path maps before writes so
+    // legitimate names such as __proto__ remain own data properties.
+    const originals = Object.assign(Object.create(null), task.originals);
+    task.applied = Object.assign(Object.create(null), task.applied);
     for (const f of proposal.files) {
       const p = await safePath(ws.root, f.path);
       if (!Object.hasOwn(originals, f.path)) {

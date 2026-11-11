@@ -34,7 +34,9 @@ to make room. Back up the whole data directory while stopped, inspect completed
 records, and manually archive only records no longer needed for recovery.
 
 Original source files used for rollback are bounded to 256 KiB each and 512 KiB
-combined per task, checked before any proposed file is written. Stored test-output
+combined per task, checked before any proposed file is written. Path-indexed recovery maps use data-only
+dictionaries, including after JSON reload, so legitimate names such as `__proto__`
+are recorded and restored without changing object prototypes. Stored test-output
 and diff excerpts retain at most 64,000 characters with explicit truncation flags.
 Inspect the actual Git diff for the complete source change. Recovery inspection
 uses the same 8 MiB record limit as the writer, so legitimate records larger than
@@ -102,7 +104,11 @@ Recovery review displays a separate container inventory. Prior-instance cleanup
 requires an explicit confirmation for the complete immutable container ID. The
 server re-inspects the ID, ownership labels, name and exact workspace bind source
 immediately before removal. Current-instance, foreign-owner and mismatched-mount
-containers are refused. Legacy unlabelled containers are not automatically
+containers are refused. A failed job or startup cleanup is surfaced as an error,
+and its labelled container remains visible in inventory. Current-instance
+resources do not gain broader cleanup permission: inspect them directly, or stop
+the server cleanly and restart before reviewing prior-instance cleanup. Never
+remove a live server lock to force this transition. Legacy unlabelled containers are not automatically
 claimed and still require direct operator inspection. Source files are retained;
 stopping a container does not prove its previous work was complete or correct.
 

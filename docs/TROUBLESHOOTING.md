@@ -20,5 +20,9 @@
 
 Task state is stored outside the repository in `task-UUID.json`. A stopped process
 can leave an applying task and a runtime container. Preserve its evidence before
-cleanup. Use ordinary Docker/Git tools under operator control; do not delete other
-users' resources. Dedicated automated crash recovery is a release gate.
+cleanup. Use [Recovery review](RECOVERY.md) to inspect task, storage and managed
+container state. Prior-instance container removal requires explicit confirmation
+and a fresh ownership check. Failed cleanup remains an error, not a successful
+stop. Use ordinary Docker/Git tools for legacy or current-instance remnants under
+operator control; do not delete other users' resources or automatically restore
+source bytes.
