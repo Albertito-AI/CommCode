@@ -280,6 +280,66 @@ test('shutdown retains the server lease until an in-flight job finishes its pers
   }
 });
 
+test('shutdown waits for mutation persistence even after its HTTP client disconnects', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'commcode-disconnected-write-'));
+  const key = token();
+  let release, entered, persisted;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const settled = new Promise((resolve) => {
+    persisted = resolve;
+  });
+  const app = await createApp({ root, token: key, mode: 'process', port: 0, previewPort: 0 });
+  const create = app.workspaces.create.bind(app.workspaces);
+  app.workspaces.create = async (data) => {
+    entered();
+    await gate;
+    try {
+      return await create(data);
+    } finally {
+      persisted();
+    }
+  };
+  const request = http.request(app.url + '/api/workspaces', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+  });
+  request.on('error', () => {}); // The deliberate disconnect is part of this regression.
+  request.end(JSON.stringify({ name: 'Disconnected creation fixture' }));
+  let closing;
+  try {
+    await started;
+    const disconnected = new Promise((resolve) => request.once('close', resolve));
+    request.destroy();
+    await disconnected;
+    closing = app.close();
+    const finishedEarly = await Promise.race([
+      closing.then(() => true),
+      new Promise((resolve) => setTimeout(() => resolve(false), 75)),
+    ]);
+    assert.equal(
+      finishedEarly,
+      false,
+      'A closed socket must not release ownership before its write handler settles',
+    );
+    await assert.rejects(acquireServerLease(root), /existing server lock/);
+    release();
+    await closing;
+    assert.equal((await app.workspaces.list()).length, 1);
+  } finally {
+    request.destroy();
+    release();
+    await settled;
+    if (closing) await closing;
+    else await app.close();
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test('preview activity delays idle suspension; an idle application is stopped without deleting sources', async (t) => {
   const { ws, runner } = await fixture(t);
   runner.idleTimeoutMs = 1000;

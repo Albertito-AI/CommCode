@@ -93,6 +93,7 @@ async function createOwnedApp({
     agent = new Agent(workspaces, runner, provider),
     jobs = new Map(),
     operations = new Set(),
+    handlers = new Set(),
     capabilities = new Map();
   let mainOrigin,
     previewOrigin,
@@ -135,7 +136,20 @@ async function createOwnedApp({
     operations.add(operation);
     return { id: key, state: job.state };
   }
-  const preview = http.createServer(async (req, res) => {
+  function serve(handler) {
+    return http.createServer((req, res) => {
+      const operation = handler(req, res);
+      handlers.add(operation);
+      operation.then(
+        () => handlers.delete(operation),
+        () => {
+          handlers.delete(operation);
+          res.destroy();
+        },
+      );
+    });
+  }
+  const preview = serve(async (req, res) => {
     try {
       if (req.headers.host !== new URL(previewOrigin).host)
         throw new Fault('Invalid preview host.', 403);
@@ -182,7 +196,7 @@ async function createOwnedApp({
       );
     }
   });
-  const server = http.createServer(async (req, res) => {
+  const server = serve(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader(
@@ -445,6 +459,7 @@ async function createOwnedApp({
       ]);
       for (const j of jobs.values()) j.controller.abort();
       await listenersClosed;
+      await Promise.allSettled([...handlers]);
       await Promise.allSettled([...operations]);
       await runner.close();
     },

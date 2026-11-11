@@ -18,12 +18,12 @@ for the remaining environment-dependent acceptance checks.
 - Verify public GitHub clone, authenticated creation and non-forced push against a
   disposable authorised test repository.
 - Require all workflow jobs to pass on the exact release commit.
-- Task-history limits, a workspace application budget with recovery reserve, idle
-  preview suspension, a cooperating-server lock and explicitly reviewed owned-container
-  cleanup are implemented. Verify the exact-head Docker/browser acceptance and
-  complete independent crash/recovery evaluation for issue #7. Hard host filesystem
-  quotas remain an operator requirement; sampled application checks do not provide
-  hostile-user disk isolation.
+- Implemented for issue #7: task-history limits, a workspace application budget
+  with recovery reserve, idle preview suspension, guarded task recovery, a server
+  lease held through shutdown persistence, and explicitly reviewed owned-container
+  cleanup. Exact-head Docker/browser acceptance is required before merge. Hard host
+  filesystem quotas and independent operator evaluation are separate operational
+  checks; sampled application limits do not provide hostile-user disk isolation.
 
 ## v0.2
 

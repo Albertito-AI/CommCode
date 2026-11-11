@@ -18,15 +18,17 @@ commands. Prior-instance container cleanup rechecks exact IDs, canonical-directo
 ownership labels and bind sources, and refuses current or mismatched resources.
 The recovery UI exposes storage and container review separately from task rollback.
 
-On Node 24.22.1, `npm run verify` passed syntax checks, all 52 unit/API/integration
-tests with no skips, and the editor build. `npm run format:check` passed. The 19
+On Node 24.22.1, `npm run verify` passed syntax checks, all 53 unit/API/integration
+tests with no skips, and the editor build. `npm run format:check` passed. The 20
 added tests include original-data preflight, record preservation, exclusive
 startup, a killed lease-holder process, idle shutdown, real command overshoot and
 termination, cancellation with guarded restore, reserved-space rollback and a
 real HTTP preview restart/capability race. A reproduced shutdown regression
 checks that a delayed job finishes persistence before lease release, a request
 whose body arrives during shutdown receives 503, and concurrent close calls share
-one completion promise. A labelled daemon adapter exercises
+one completion promise. A second reproduced case verifies persistence completes
+even after the initiating HTTP client disconnects; actual handler promises are
+drained, not only connections. A labelled daemon adapter exercises
 failed-removal tracking, confirmed absence and failed job/startup cleanup; it is
 not a real Docker test. Two reproduced regressions also verify that legitimate
 `__proto__` filenames are recorded and restored through JSON-reloaded task maps
@@ -46,7 +48,9 @@ must pass before merge. No live inference was substituted with a fixture.
 These are controlled software tests, including actual local processes, not
 independent operator use. Hard host quotas, hostile local-user resistance and
 independent recovery evaluation remain separate gates. See the precise
-[recovery boundaries](RECOVERY.md); issue #7 remains open for acceptance review.
+[recovery boundaries](RECOVERY.md) and the bounded engineering acceptance in
+[issue #7](https://github.com/Albertito-AI/CommCode/issues/7). Independent operator
+use and hard kernel quotas are separate from that implemented scope.
 
 ### Observed public CI for the complete implementation
 
@@ -59,7 +63,7 @@ formatting, the 48 tests present at that head, build, advisory audit and demo al
 passed. The browser artifact was downloaded and its SHA-256 matched
 `f6b3f8c2207982e8c5697166a6c5c438f187206aea4e630b301e482cdf43b71d`;
 desktop and mobile screenshots were visually inspected. A subsequent review
-added four regressions, made job/startup cleanup failures visible, corrected
+added five regressions, made job/startup cleanup failures visible, corrected
 special-filename recovery maps and held the shutdown lease until job persistence; that final source must receive its own exact-head
 CI before merge. The observed run does not establish live-model or independent-user
 acceptance.

@@ -80,7 +80,8 @@ guarantee against external disk exhaustion.
 Startup acquires `.server.lock` with exclusive filesystem creation and records
 the process, host and instance identity. A second server refuses to start, even
 if it chooses other HTTP ports. Clean shutdown rejects new work, drains active
-HTTP handlers and waits for in-flight jobs to finish their terminal persistence
+HTTP handler promises, including disconnected requests, and waits for in-flight
+jobs to finish their terminal persistence
 before removing its own lock. Concurrent close callers share the same completion
 promise. A cleanup failure retains the lease for retry; shutdown never forces an
 unsafe release. A killed process leaves a visible lock and startup refuses to
@@ -127,8 +128,8 @@ The same authenticated operations are available as:
 All require the existing bearer token; POST also requires `application/json` and
 the normal same-origin/host checks. Do not remove a live server lock to manufacture
 cleanup authority. Hard host quotas, hostile local-user resistance and independent
-operator recovery evaluation remain outside the implemented gate. Track any
-remaining acceptance in [issue #7](https://github.com/Albertito-AI/CommCode/issues/7).
+operator recovery evaluation remain separate operational checks. The bounded
+engineering acceptance is recorded in [issue #7](https://github.com/Albertito-AI/CommCode/issues/7).
 
 The initial gate is useful when an operator restarts after a crash: the question
 "what persisted and what would a rollback overwrite?" is answerable without
