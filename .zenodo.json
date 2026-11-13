@@ -1,0 +1,20 @@
+{
+  "title": "CommCode",
+  "description": "An independently implemented agent-oriented coding platform with reviewable changes and replaceable model and runtime adapters. This deposit preserves a dated source snapshot of the implementation and documentation, with the limitations stated in the repository.",
+  "creators": [
+    {
+      "name": "Tan, Sin Hon Albert",
+      "orcid": "0009-0001-8996-7933"
+    }
+  ],
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "AGPL-3.0-or-later",
+  "notes": "AGPL-3.0-or-later applies to the platform; templates and third-party components retain their own terms. No model weights are included. Archival publication does not establish peer review, independent validation or production readiness.",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Albertito-AI/CommCode",
+      "relation": "isSupplementTo"
+    }
+  ]
+}
