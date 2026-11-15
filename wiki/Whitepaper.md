@@ -2,70 +2,81 @@
 
 # CommCode: software creation as a capability people can own
 
-## The thesis
+Prepared for Albert Tan Sin Hon with AI assistance. Foundational paper: 2 November 2026. Documentation revision: 15 November 2026. This is a design and evidence synthesis, not independent peer review or a new product evaluation.
 
-People should be able to turn useful ideas into software without surrendering their source, history and practical ability to maintain it. CommCode is an independently implemented workbench built around that proposition. It combines editing, bounded execution, previews, ordinary Git projects and reviewable AI changes in a local development environment.
+## Abstract
 
-The immediate product is a modest single-operator workbench. The larger ambition is a public-interest infrastructure for creation: schools, community organisations, researchers and small enterprises can build tools appropriate to their own circumstances and retain the ability to inspect, repair and leave with them.
+CommCode asks whether ordinary people and small institutions can create useful software while retaining practical control over its source, execution and maintenance. Its current contribution is a public, single-operator local workbench: editing, tests, previews, Git history and bounded, reviewable model proposals. Its public-interest proposition is broader than generation speed. Users should be able to understand a change, reject it, recover from failure and leave with usable source. This paper defines those objectives, maps implementation claims to a fixed source snapshot, explains a recovery example and proposes an evaluation of user control. Current storage and recovery protections are described alongside their limits. No live-model effectiveness, production safety or measured social benefit is established.
 
-Prepared for Albert Tan Sin Hon with AI assistance on 2 November 2026. This paper separates the verified development preview from the ideal roadmap. It does not describe a finished cloud platform, a multi-user security boundary or verified live AI inference.
+## Purpose and definitions
 
-## First principles: ownership must remain practical
+The intended beneficiaries include researchers, schools, community organisations and small enterprises whose needs do not justify surrendering their tools to a proprietary service. Useful creation includes the ability to maintain and transfer a project after its first demonstration.
 
-Legal permission to possess code is useful only if the code can also be understood, run and moved. CommCode therefore uses ordinary source files and Git repositories, portable templates and replaceable runtime/model adapters. Its core editing, testing, preview and Git functions do not require an AI subscription.
+Here, **ownership** is an operational objective: possession of ordinary source and history, a usable export path, and sufficient understanding to continue elsewhere. It is not a new legal definition. **A proposal** is a model-produced candidate edit; **verification** is evidence from specified checks; **acceptance** is the operator's decision to retain a particular change. A passing test establishes the behaviour it exercises, not general correctness. **Recovery** means a guarded attempt to reconcile an interrupted task with present files and Git state, rather than an unconditional reset.
 
-The second principle is that generation and completion are different. A model's proposed edit is a hypothesis about a change. It should be inspected, applied within a controlled transaction, tested against the configured command and either accepted or reversed without overwriting unrelated work. A successful test establishes the behaviour checked by that test, not universal correctness.
+These definitions make the thesis testable. If users cannot explain their retained changes, recover without destroying later work, or run exported projects independently, the practical-control objective has failed even when an application appears quickly.
 
-The third principle is bounded authority. Model output should not become arbitrary control-plane commands. Source context must be reviewed before sharing, credentials stay outside workspaces, and commands execute through an explicitly selected runtime. A capable assistant does not acquire permission merely by predicting a useful next step.
+## Current system and trust boundaries
 
-## Fundamental logic of the workbench
+The inspected baseline is [commit 0e5a4e357e6bf357df49250ea745298fb698bfb4](https://github.com/Albertito-AI/CommCode/tree/0e5a4e357e6bf357df49250ea745298fb698bfb4), described in the [README](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md) as development snapshot 0.1.0-dev.1. It is a local preview for one operator, not a hosted production service. Core editing, tests, previews and Git operations need no AI subscription.
 
-The browser interface supplies a CodeMirror editor, source explorer, command console, review controls and preview. The loopback API uses a bearer token and host/origin checks. Workspaces retain local metadata and ordinary Git history. Optimistic version checks refuse stale saves, and workspace locks bound competing mutations.
+The browser talks to a token-authenticated loopback API. Projects remain ordinary repositories. The assisted-change path selects bounded context, obtains a structured proposal, presents it for review, checks stale state and runs the configured tests after application. A bounded repair path and conflict-aware rollback exist. These controls constrain an operation; they do not establish that a model's proposal is useful or that the configured tests are adequate.
 
-Docker is the default execution path and does not silently fall back to the host. Containers apply non-root execution, a read-only root, restricted Git internals and resource limits. Commands normally have no network; dependency installation is an explicit exception. Preview traffic uses a separate origin and a bounded fixed HTTP transport into a network-disabled container. Docker shares a host kernel and daemon trust boundary; these controls do not make arbitrary public hosting safe.
+Docker is the default execution adapter and does not silently fall back to the host. The documented controls include non-root execution, resource limits, read-only root and Git internals, and normally disabled command networking, with a dependency-installation exception. Effective limits still depend on the host. The explicitly unsafe local option executes on the host without isolation. Neither mode creates a boundary between mutually untrusted users. Previews are limited to GET/HEAD and the documented asset/port contract.
 
-For trusted fixtures, an explicitly unsafe local process adapter supports development. The distinction is visible. The current console is not a full PTY, and preview support is GET/HEAD with restricted routing rather than a general application gateway.
+Recovery and storage have progressed beyond the founding paper's roadmap. The [workspace budget](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/workspace-budget.mjs) sets 512 MiB, reserving 16 MiB for recovery; ordinary admission therefore uses 496 MiB. Command growth is sampled and checked again after completion. This is an application budget, not a kernel-enforced quota: a fast writer or external process can exceed it before intervention. The [task store](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/task-store.mjs) caps history at 200 records, 8 MiB per record and 64 MiB total. Existing records are retained when limits block new work. The [server lease](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/server-lease.mjs) excludes a second cooperating server using the same data directory. It cannot coordinate arbitrary external editors or prove that manually removing a stale lock is safe.
 
-## The AI loop as a reviewable transaction
+Interrupted-task review, guarded rollback, confirmed cleanup of verified prior-instance containers and a 15-minute idle-preview timeout are current documented capabilities. Hard filesystem quotas, comprehensive abrupt-failure guarantees and multi-user operation are not implied. A local activity hash chain is inspectable evidence, not an independently anchored or tamper-proof audit.
 
-The agent path begins from a clean worktree and a bounded context selection. A structured proposal names file changes. The operator reviews it before application. The programme checks for stale state, executes the configured tests and permits a bounded repair sequence. Rollback refuses to erase subsequent user edits or a later commit.
+## Worked example and counterexample
 
-This design treats recovery as a correctness problem. “Undo” is unsafe when it assumes nothing else has changed. Task records and an activity ledger make actions inspectable, but a local hash chain is not a tamper-proof external audit. A read-only interrupted-task inventory is now available; guarded rollback still requires review. Disk quotas and stronger operational guarantees remain work to do.
+Consider a fictional expense project with a clean Git tree at commit A. The operator requests a validation change, reviews the chosen context and then reviews a proposal changing one file. The workbench checks the saved baseline before applying it. The configured test fails. The operator can inspect the failure and choose a bounded repair or reviewed rollback.
 
-Ollama and compatible-chat adapters exist. Protocol fixtures exercise their interfaces; they do not establish real model quality. The next live acceptance run should identify the actual model and configuration, preserve the proposal and test results, record cost and disclose any manual intervention. It must not quietly replace a difficult model failure with a scripted success.
+If the file still matches the task's recorded post-change state and Git remains compatible, rollback can restore the recorded earlier content. Now change the scenario: the operator has independently edited that file after the task, or committed subsequent work. An unconditional reset would destroy unrelated work. Conflict-aware rollback should refuse, retain the evidence and require reconciliation. Refusal is the correct outcome in that counterexample; it is not evidence that recovery is broken. The relevant implementation evidence is the [recovery regression suite](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/test/recovery.test.mjs), not the plausibility of this narrative.
 
-## Aim and hope: a smaller gap between need and useful software
+A second counterexample concerns evaluation. Suppose a generated fix passes a test that only checks an empty input, while corrupting non-empty records. “Tests passed” is true for that test and inadequate for accepting the feature. A useful assisted-change workflow needs meaningful tests and operator judgement, not merely a green status.
 
-A community group may need an expense tracker, a teacher a small exercise tool, or a researcher a local data interface. Their needs can be too specific for a general product and too small for a large procurement. CommCode hopes to make such creation more attainable while preserving understanding and control.
+## Evidence and reproducibility
 
-The benefit depends on maintainability. A generated application that nobody can repair may create a new dependency rather than solve one. Templates, explanations, tests and export are therefore part of the public-interest purpose. Accessibility, low-bandwidth use and modest hardware requirements should influence design decisions alongside advanced functionality.
+The table separates source facts, recorded observations and untested propositions. This documentation audit did not execute repository code.
 
-The platform uses AGPL-3.0-or-later and its starter templates use CC0-1.0. These are distinct grants with different purposes. The project aims to keep its core useful without a paid feature gate, while allowing users to build and retain their own ordinary projects. This paper makes no new legal interpretation of those licences.
+| Claim | Evidence at the inspected snapshot | What it does not establish |
+| --- | --- | --- |
+| Application storage bounds and reserved recovery space exist | [Budget implementation](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/workspace-budget.mjs), [storage tests](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/test/storage.test.mjs) | Hard OS quota or zero overshoot |
+| Task records and cooperating-instance exclusion exist | [Task store](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/task-store.mjs), [lease](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/server-lease.mjs) | Distributed or hostile multi-user coordination |
+| Regression and acceptance work has been recorded | [Verification record](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/docs/VERIFICATION.md) | A fresh run of every check at this baseline |
+| Model protocols have fixture coverage | [README verification scope](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md) | Live inference quality, model independence or paid-provider availability |
+| Git creation/push adapter is implemented | [Remaining acceptance work](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md) | Successful authenticated create/push through the product |
+| Users will gain durable practical control | Proposed study below | Any measured user benefit today |
 
-## Ideal progression and wishlist
+Historical receipts must retain their identities. The first prerelease at `fdc8509cf8af432f27c99fdd6dbe01531faa789c` recorded 28 unit/API tests plus browser and Docker acceptance, with browser execution in trusted-local mode and Docker checked separately. The later verification document reports 53 local tests and separately records an earlier native 48-test run. Those observations must not be combined into a new claim that all 53 tests ran natively at the present HEAD.
 
-| Stage                    | Intended outcome                                                   | Evidence required                                                                  |
-| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Verified local slice     | Edit, test, preview and preserve source                            | Fresh checkout, real browser flow, Docker checks and exact-commit CI               |
-| Reliable assisted change | Useful live-model proposals with honest failures                   | Actual provider run, bounded repairs, context/privacy review and recovery evidence |
-| Durable everyday work    | Crash recovery, storage limits and better terminal/preview support | Failure injection, cancellation, migration and independent first use               |
-| Accessible learning      | Explainable workflows, inclusive UI and portable teaching examples | Keyboard, language and user evaluation; measured comprehension                     |
-| Controlled collaboration | Multiple users and institutional deployment                        | Explicit threat model, identity, isolation, audit and independent security review  |
+To repeat the software checks, first inspect the fixed [installation and verification instructions](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md) and use an unprivileged Linux account with Node.js 24+, Git and Docker. In a checkout of the baseline:
 
-The ideal wishlist includes a full terminal, richer previews, accessible project walkthroughs, stronger test protection, reliable GitHub integration, portable deployment and institutional self-hosting. Stronger isolation such as microVMs should follow a justified threat model. A large feature list does not substitute for a dependable path through a small real task.
+~~~sh
+npm ci
+npm run build
+npm run setup:runtime
+npm run verify
+npm run format:check
+npm run test:docker
+~~~
 
-## Evidence and limits at the first development release
+Browser acceptance additionally requires the documented Chromium installation and `npm run test:browser`. Record the checkout SHA, dependency lockfile, Node/Docker/browser versions, commands, exit codes and logs. Dependency installation can contact registries; these commands are instructions for a deliberate reproduction, not claims of execution here. The deterministic demo does not call a live model. A live acceptance study must separately record provider/model identity, context sent, cost, every attempt and manual intervention.
 
-The first prerelease is tied to commit `fdc8509cf8af432f27c99fdd6dbe01531faa789c`. Its release workflow passed formatting, 28 unit/API tests, frontend build, advisory audit, real Docker integration and real Chromium desktop/mobile acceptance. The browser flow used trusted-local execution; Docker was exercised separately. Screenshots were inspected, including an actual mobile expense entry after an initial off-screen iframe capture issue was corrected.
+## Related work and implications
 
-Live inference and the product's authenticated GitHub create/push path remain acceptance tasks. Publishing the CommCode source through GitHub tooling does not verify that product integration. There is no hosted production service, security certification or claim of independent adoption.
+Perry, Srivastava, Kumar and Boneh's [2023 user study](https://arxiv.org/abs/2211.03622v3), published at CCS, found less secure solutions and greater security confidence among participants with a particular AI assistant in its experimental setting. It did not test CommCode or all contemporary models. It motivates measuring confidence alongside observed defects and examining whether review controls improve detection rather than merely reassuring users.
 
-## Measuring public value
+Souppaya, Scarfone and Dodson's [NIST SSDF version 1.1](https://csrc.nist.gov/pubs/sp/800/218/final), SP 800-218 (2022), supplies an official vocabulary for secure development practices. It is a reference for organising evidence and response to defects. Mentioning it does not constitute a CommCode compliance assessment or certification.
 
-Evaluate time to a working, understood and recoverable project. Include setup, debugging, reviewing AI output, correcting mistakes and exporting the result. Measure how often a user can explain the change, recover from failure and continue in another editor. Record regressions, resource cost and accessibility obstacles.
+## Research programme, limits and teaching
 
-If the tool makes people dependent on opaque generated code, it is missing its purpose. If safety controls make ordinary work incomprehensible, they need better design. If a simpler workflow serves a community better, support that route. The best case is increased agency: more people can create useful software and remain able to govern it after the first successful demo.
+A first proposed usability study should use synthetic, bounded tasks with hidden evaluation cases and a predeclared comparison: the same workbench with and without assisted proposals. Record successful task completion, retained defects, time spent, comprehension of the final diff, confidence calibration and recovery from an injected stale-state conflict. Counterbalance task order and report prior programming experience. Publish failed and abandoned tasks alongside successes. A later portability exercise should ask participants to export a committed project and continue with ordinary tools outside CommCode.
 
-## Inspected foundation
+The important adverse outcome is faster completion accompanied by poorer understanding or more destructive recovery decisions. That result would require revising the workflow, even if users liked it. Live inference, authenticated GitHub create/push through the product, accessibility evaluation and independent first-use experience remain distinct acceptance gates. MicroVM isolation, a full terminal, richer previews and institutional hosting should follow demonstrated needs and an explicit threat model.
 
-Sources: [release](https://github.com/Albertito-AI/CommCode/releases/tag/v0.1.0-dev.1), [release verification run](https://github.com/Albertito-AI/CommCode/actions/runs/41455489247), [README](https://github.com/Albertito-AI/CommCode/blob/fdc8509cf8af432f27c99fdd6dbe01531faa789c/README.md), [verification record](https://github.com/Albertito-AI/CommCode/blob/fdc8509cf8af432f27c99fdd6dbe01531faa789c/docs/VERIFICATION.md), [threat model](https://github.com/Albertito-AI/CommCode/blob/fdc8509cf8af432f27c99fdd6dbe01531faa789c/THREAT_MODEL.md) and [roadmap](https://github.com/Albertito-AI/CommCode/blob/fdc8509cf8af432f27c99fdd6dbe01531faa789c/ROADMAP.md). CommCode is the owner's selected name; documented existing business use means no trademark clearance or affiliation is asserted.
+For teaching, ask a learner to identify the evidence necessary to accept the fictional validation fix; explain why a stale-state refusal protects their work; and design a test that passes a superficial implementation but catches a meaningful defect. Ask a second reviewer to separate observed facts, implementation inferences and proposed benefits in this paper.
+
+The platform remains AGPL-3.0-or-later and the starter templates CC0-1.0. These are separate grants; this paper changes neither. The public-interest aim remains software creation that people can inspect, maintain and leave with. Its achievement requires evidence from use, not a larger feature inventory.
+
