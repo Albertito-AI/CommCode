@@ -17,4 +17,3 @@ The publisher writes only its marked Whitepaper and a marked, additive Home sect
 Only if a later check actually reports an uninitialised Wiki should a maintainer follow GitHub's [initialisation instructions](https://docs.github.com/en/communities/documenting-your-project-with-wikis/adding-or-editing-wiki-pages) and create the first Home page. An authentication or network error alone does not establish that initialisation is missing. Review credentials, permissions and the actual failure before choosing a recovery action.
 
 The publisher does not execute Wiki content, change repository visibility or confer new reuse rights. Its successful publication is evidence of distribution, not evidence of scientific validation.
-

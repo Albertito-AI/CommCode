@@ -7,4 +7,3 @@ Read the **[project whitepaper](https://github.com/Albertito-AI/CommCode/wiki/Wh
 Prepared for Albert Tan Sin Hon with AI assistance. Foundational paper: 2 November 2026; documentation revision: 15 November 2026. The paper separates implementation facts, historical verification and proposed research. It is not independent peer review. Existing project licences and data boundaries remain unchanged.
 
 The [versioned publication source](https://github.com/Albertito-AI/CommCode/blob/main/wiki/Whitepaper.md) and [publication notes](https://github.com/Albertito-AI/CommCode/blob/main/wiki/README.md) identify the update process. The [inspected implementation baseline](https://github.com/Albertito-AI/CommCode/tree/0e5a4e357e6bf357df49250ea745298fb698bfb4) fixes the code discussed in this revision.
-

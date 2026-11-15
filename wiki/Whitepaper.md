@@ -40,27 +40,27 @@ A second counterexample concerns evaluation. Suppose a generated fix passes a te
 
 The table separates source facts, recorded observations and untested propositions. This documentation audit did not execute repository code.
 
-| Claim | Evidence at the inspected snapshot | What it does not establish |
-| --- | --- | --- |
-| Application storage bounds and reserved recovery space exist | [Budget implementation](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/workspace-budget.mjs), [storage tests](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/test/storage.test.mjs) | Hard OS quota or zero overshoot |
-| Task records and cooperating-instance exclusion exist | [Task store](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/task-store.mjs), [lease](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/server-lease.mjs) | Distributed or hostile multi-user coordination |
-| Regression and acceptance work has been recorded | [Verification record](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/docs/VERIFICATION.md) | A fresh run of every check at this baseline |
-| Model protocols have fixture coverage | [README verification scope](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md) | Live inference quality, model independence or paid-provider availability |
-| Git creation/push adapter is implemented | [Remaining acceptance work](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md) | Successful authenticated create/push through the product |
-| Users will gain durable practical control | Proposed study below | Any measured user benefit today |
+| Claim                                                        | Evidence at the inspected snapshot                                                                                                                                                                                                                                      | What it does not establish                                               |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Application storage bounds and reserved recovery space exist | [Budget implementation](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/workspace-budget.mjs), [storage tests](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/test/storage.test.mjs) | Hard OS quota or zero overshoot                                          |
+| Task records and cooperating-instance exclusion exist        | [Task store](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/task-store.mjs), [lease](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/src/server-lease.mjs)                           | Distributed or hostile multi-user coordination                           |
+| Regression and acceptance work has been recorded             | [Verification record](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/docs/VERIFICATION.md)                                                                                                                                      | A fresh run of every check at this baseline                              |
+| Model protocols have fixture coverage                        | [README verification scope](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md)                                                                                                                                           | Live inference quality, model independence or paid-provider availability |
+| Git creation/push adapter is implemented                     | [Remaining acceptance work](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md)                                                                                                                                           | Successful authenticated create/push through the product                 |
+| Users will gain durable practical control                    | Proposed study below                                                                                                                                                                                                                                                    | Any measured user benefit today                                          |
 
 Historical receipts must retain their identities. The first prerelease at `fdc8509cf8af432f27c99fdd6dbe01531faa789c` recorded 28 unit/API tests plus browser and Docker acceptance, with browser execution in trusted-local mode and Docker checked separately. The later verification document reports 53 local tests and separately records an earlier native 48-test run. Those observations must not be combined into a new claim that all 53 tests ran natively at the present HEAD.
 
 To repeat the software checks, first inspect the fixed [installation and verification instructions](https://github.com/Albertito-AI/CommCode/blob/0e5a4e357e6bf357df49250ea745298fb698bfb4/README.md) and use an unprivileged Linux account with Node.js 24+, Git and Docker. In a checkout of the baseline:
 
-~~~sh
+```sh
 npm ci
 npm run build
 npm run setup:runtime
 npm run verify
 npm run format:check
 npm run test:docker
-~~~
+```
 
 Browser acceptance additionally requires the documented Chromium installation and `npm run test:browser`. Record the checkout SHA, dependency lockfile, Node/Docker/browser versions, commands, exit codes and logs. Dependency installation can contact registries; these commands are instructions for a deliberate reproduction, not claims of execution here. The deterministic demo does not call a live model. A live acceptance study must separately record provider/model identity, context sent, cost, every attempt and manual intervention.
 
@@ -79,4 +79,3 @@ The important adverse outcome is faster completion accompanied by poorer underst
 For teaching, ask a learner to identify the evidence necessary to accept the fictional validation fix; explain why a stale-state refusal protects their work; and design a test that passes a superficial implementation but catches a meaningful defect. Ask a second reviewer to separate observed facts, implementation inferences and proposed benefits in this paper.
 
 The platform remains AGPL-3.0-or-later and the starter templates CC0-1.0. These are separate grants; this paper changes neither. The public-interest aim remains software creation that people can inspect, maintain and leave with. Its achievement requires evidence from use, not a larger feature inventory.
-
